@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { authService } from './authService';
-import { Booking, BookingStatus } from '../types';
+import { Booking, BookingStatus, Car } from '../types';
 
 export interface DashboardStats {
   totalCars: number;
@@ -8,6 +8,9 @@ export interface DashboardStats {
   activeRentals: number;
   revenueThisMonth: number;
   recentBookings: Booking[];
+  // New fields for Gantt Chart
+  cars: Car[];
+  monthBookings: Booking[];
 }
 
 export const dashboardService = {
@@ -19,7 +22,9 @@ export const dashboardService = {
         totalCustomers: 0,
         activeRentals: 0,
         revenueThisMonth: 0,
-        recentBookings: []
+        recentBookings: [],
+        cars: [],
+        monthBookings: []
       };
     }
 
@@ -28,16 +33,20 @@ export const dashboardService = {
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
 
+    // Range for Gantt (Current Month +/- small buffer if needed, keeping strict month for now)
+    // We fetch bookings that overlap with current month
+    // (start <= endOfMonth AND end >= startOfMonth)
+
     try {
-      // 1. Parallel Fetching for Counts
-      const [carsRes, customersRes, activeRes, revenueRes, recentRes] = await Promise.all([
-        // Total Cars
+      // 1. Parallel Fetching
+      const [carsRes, customersRes, activeRes, revenueRes, recentRes, allCarsRes, monthBookingsRes] = await Promise.all([
+        // Total Cars Count
         supabase.from('cars').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
         
-        // Total Customers
+        // Total Customers Count
         supabase.from('customers').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
         
-        // Active Rentals (Status Active OR (Start <= Now <= End AND Status != Cancelled))
+        // Active Rentals Count
         supabase.from('bookings')
           .select('id')
           .eq('company_id', companyId)
@@ -45,7 +54,7 @@ export const dashboardService = {
           .lte('start_date', now.toISOString())
           .gte('end_date', now.toISOString()),
 
-        // Revenue This Month (Based on start_date)
+        // Revenue This Month
         supabase.from('bookings')
           .select('total_price')
           .eq('company_id', companyId)
@@ -66,7 +75,29 @@ export const dashboardService = {
           `)
           .eq('company_id', companyId)
           .order('created_at', { ascending: false })
-          .limit(5)
+          .limit(5),
+
+        // All Cars (For Gantt Rows)
+        supabase.from('cars')
+          .select('id, brand, model, license_plate, status')
+          .eq('company_id', companyId)
+          .order('brand', { ascending: true }),
+
+        // Month Bookings (For Gantt Bars)
+        supabase.from('bookings')
+          .select(`
+            id,
+            car_id,
+            start_date, 
+            end_date, 
+            status,
+            customers (full_name)
+          `)
+          .eq('company_id', companyId)
+          .neq('status', BookingStatus.CANCELLED)
+          // Logic: Booking starts before end of month AND Booking ends after start of month
+          .lte('start_date', lastDayOfMonth)
+          .gte('end_date', firstDayOfMonth)
       ]);
 
       // Calculate Revenue
@@ -77,7 +108,9 @@ export const dashboardService = {
         totalCustomers: customersRes.count || 0,
         activeRentals: activeRes.data?.length || 0,
         revenueThisMonth: revenue,
-        recentBookings: (recentRes.data as unknown as Booking[]) || []
+        recentBookings: (recentRes.data as unknown as Booking[]) || [],
+        cars: (allCarsRes.data as Car[]) || [],
+        monthBookings: (monthBookingsRes.data as unknown as Booking[]) || []
       };
 
     } catch (error) {

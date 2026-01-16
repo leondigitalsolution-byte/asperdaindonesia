@@ -1,10 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link, useNavigate } from 'react-router-dom';
 import { bookingService } from '../../service/bookingService';
-import { Booking, BookingStatus } from '../../types';
+import { Booking, BookingStatus, AppSettings, DriverOption } from '../../types';
+import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
 import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, Printer, Download } from 'lucide-react';
+import { ChecklistModal } from '../../components/bookings/ChecklistModal';
 
 export const BookingListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +23,9 @@ export const BookingListPage: React.FC = () => {
 
   // Dropdown State
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+  // Checklist State
+  const [checklistBooking, setChecklistBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
     fetchBookings();
@@ -70,6 +76,17 @@ export const BookingListPage: React.FC = () => {
     }).format(date);
   };
 
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'numeric',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
+
   const getDurationDays = (start: string, end: string) => {
       const s = new Date(start).getTime();
       const e = new Date(end).getTime();
@@ -107,8 +124,8 @@ export const BookingListPage: React.FC = () => {
       window.open(`https://wa.me/${booking.customers.phone.replace(/^0/, '62')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  const handleChecklist = (bookingId: string) => {
-      alert("Fitur Checklist Serah Terima (Modal) akan muncul di sini.");
+  const handleChecklist = (booking: Booking) => {
+      setChecklistBooking(booking);
   };
   
   // ACTION BUTTONS HANDLERS
@@ -137,36 +154,199 @@ export const BookingListPage: React.FC = () => {
   };
   
   const handlePrintInvoice = (booking: Booking) => {
+      // 1. Get Company Settings for Header
+      const settings = getStoredData<AppSettings>('appSettings', DEFAULT_SETTINGS);
+      
+      // 2. Calculate Costs Breakdown
+      const startDate = new Date(booking.start_date);
+      const endDate = new Date(booking.end_date);
+      const days = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)));
+      
+      const unitPrice = booking.cars?.price_per_day || 0;
+      const totalSewaUnit = unitPrice * days;
+      const deliveryFee = booking.delivery_fee || 0;
+      const overdueFee = booking.overdue_fee || 0;
+      const extraFee = booking.extra_fee || 0;
+      
+      const calculatedExtras = totalSewaUnit + deliveryFee + overdueFee + extraFee;
+      let driverCost = 0;
+      let driverDesc = '-';
+      
+      if (booking.driver_option === DriverOption.WITH_DRIVER) {
+          if (booking.total_price > calculatedExtras) {
+              driverCost = booking.total_price - calculatedExtras;
+              driverDesc = `Jasa Driver (${days} Hari)`;
+          }
+      }
+
       const remaining = booking.total_price - (booking.amount_paid || 0);
+      const isLunas = remaining <= 0;
+
+      // 3. Generate HTML
       const invoiceHTML = `
+        <!DOCTYPE html>
         <html>
         <head>
-          <title>Invoice - ${booking.id}</title>
+          <title>Invoice #${booking.id.slice(0, 8).toUpperCase()}</title>
           <style>
-            body { font-family: sans-serif; padding: 20px; }
-            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-            .details { margin-bottom: 20px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-            .total { font-weight: bold; font-size: 1.2em; border-top: 1px solid #ccc; margin-top: 10px; padding-top: 5px; }
-            .status { text-align: center; margin-top: 20px; font-weight: bold; color: ${remaining <= 0 ? 'green' : 'red'}; border: 2px solid currentColor; padding: 10px; display: inline-block; }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; max-width: 850px; margin: 0 auto; color: #1e293b; background: #fff; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 1px solid #f1f5f9; padding-bottom: 30px; }
+            .company-info { flex: 1; padding-right: 20px; }
+            .logo { max-height: 70px; margin-bottom: 15px; display: block; object-fit: contain; }
+            .company-name { font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; color: #0f172a; }
+            .tagline { font-size: 11px; color: #64748b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+            .address { font-size: 13px; line-height: 1.5; color: #334155; }
+            .invoice-details { text-align: right; min-width: 200px; }
+            .invoice-title { 
+                background: #fecaca; color: #991b1b; 
+                padding: 10px 25px; font-weight: 800; font-size: 18px; 
+                letter-spacing: 2px; text-transform: uppercase; 
+                display: inline-block; margin-bottom: 15px; border-radius: 4px; border: 1px solid #fca5a5;
+            }
+            .meta-table { float: right; width: 100%; }
+            .meta-table td { padding: 3px 0 3px 15px; font-size: 14px; text-align: right; }
+            .meta-label { font-weight: 700; color: #64748b; }
+            .meta-val { font-weight: 600; color: #0f172a; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+            .section-header { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #94a3b8; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 15px; letter-spacing: 0.5px; }
+            .info-row { display: flex; margin-bottom: 8px; font-size: 14px; align-items: baseline; }
+            .info-label { width: 90px; font-weight: 600; color: #64748b; font-size: 13px; flex-shrink: 0; }
+            .info-val { flex: 1; font-weight: 500; color: #334155; }
+            .cost-table { width: 100%; border-collapse: collapse; }
+            .cost-table th { background: #f8fafc; padding: 12px 15px; text-align: left; font-size: 12px; font-weight: 800; text-transform: uppercase; color: #475569; border-bottom: 2px solid #e2e8f0; }
+            .cost-table td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #334155; }
+            .text-right { text-align: right; }
+            .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: -0.5px; }
+            .totals-container { display: flex; justify-content: flex-end; margin-bottom: 40px; margin-top: 30px; }
+            .totals-box { width: 350px; background: #f8fafc; border-radius: 8px; overflow: hidden; padding: 10px; border: 1px solid #e2e8f0; }
+            .total-row { display: flex; justify-content: space-between; padding: 10px 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+            .total-row.main { background: #e2e8f0; font-weight: 800; color: #0f172a; font-size: 15px; border-radius: 4px; }
+            .status-badge { font-weight: 800; font-size: 14px; padding: 6px 15px; border-radius: 20px; display: inline-block; width: 100%; text-align: center; }
+            .lunas { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+            .belum { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+            .footer { font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 25px; }
+            .footer-title { font-weight: 700; margin-bottom: 5px; color: #475569; text-transform: uppercase; font-size: 11px; }
+            @media print {
+                body { padding: 0; margin: 20px; }
+                .invoice-title { -webkit-print-color-adjust: exact; }
+                .lunas, .belum, .header, .cost-table th, .total-row.main { -webkit-print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
            <div class="header">
-             <h1>INVOICE RENTAL</h1>
-             <p>No: #${booking.id.slice(0, 8).toUpperCase()}</p>
+             <div class="company-info">
+               ${settings.logoUrl ? `<img src="${settings.logoUrl}" class="logo" alt="Logo"/>` : ''}
+               <div class="company-name">${settings.companyName || 'NAMA PERUSAHAAN'}</div>
+               <div class="tagline">${settings.tagline || 'Rental Mobil Terpercaya'}</div>
+               <div class="address">
+                 ${settings.address || 'Alamat Perusahaan'}<br>
+                 ${settings.phone || 'Telp'} | ${settings.email || 'Email'}
+               </div>
+             </div>
+             <div class="invoice-details">
+                <div class="invoice-title">INVOICE</div>
+                <table class="meta-table">
+                    <tr><td class="meta-label">Nomor :</td><td class="meta-val">#${booking.id.slice(0, 8).toUpperCase()}</td></tr>
+                    <tr><td class="meta-label">Tanggal :</td><td class="meta-val">${formatDate(new Date().toISOString())}</td></tr>
+                </table>
+             </div>
            </div>
-           <div class="details">
-             <div class="row"><span>Penyewa:</span> <span>${booking.customers?.full_name}</span></div>
-             <div class="row"><span>Unit:</span> <span>${booking.cars?.brand} ${booking.cars?.model} (${booking.cars?.license_plate})</span></div>
-             <div class="row"><span>Tanggal Sewa:</span> <span>${formatDate(booking.start_date)} - ${formatDate(booking.end_date)}</span></div>
-             <div class="row"><span>Total Biaya:</span> <span>Rp ${booking.total_price.toLocaleString('id-ID')}</span></div>
-             <div class="row"><span>Sudah Bayar:</span> <span>Rp ${(booking.amount_paid || 0).toLocaleString('id-ID')}</span></div>
-             <div class="row total"><span>Sisa Tagihan:</span> <span>Rp ${remaining.toLocaleString('id-ID')}</span></div>
+
+           <div class="info-grid">
+             <div class="section-box">
+                <div class="section-header">KEPADA YTH (PENYEWA):</div>
+                <div class="info-row"><div class="info-label">Nama</div><div class="info-val">: ${booking.customers?.full_name || '-'}</div></div>
+                <div class="info-row"><div class="info-label">No. WA / HP</div><div class="info-val">: ${booking.customers?.phone || '-'}</div></div>
+                <div class="info-row"><div class="info-label">Alamat</div><div class="info-val">: ${booking.customers?.address || '-'}</div></div>
+                <div class="info-row"><div class="info-label">Tgl. Ambil</div><div class="info-val">: ${formatDateTime(booking.start_date)}</div></div>
+                <div class="info-row"><div class="info-label">Tgl. Kembali</div><div class="info-val">: ${formatDateTime(booking.end_date)}</div></div>
+             </div>
+             <div class="section-box">
+                <div class="section-header">DETAIL KENDARAAN:</div>
+                <div class="info-row"><div class="info-label">Unit</div><div class="info-val">: ${booking.cars?.brand} ${booking.cars?.model}</div></div>
+                <div class="info-row"><div class="info-label">Nopol</div><div class="info-val">: ${booking.cars?.license_plate}</div></div>
+                <div class="info-row"><div class="info-label">Paket</div><div class="info-val">: ${booking.rental_package || '-'}</div></div>
+                <div class="info-row"><div class="info-label">Durasi</div><div class="info-val">: ${days} Hari</div></div>
+             </div>
            </div>
-           <div style="text-align:center">
-             <div class="status">${remaining <= 0 ? 'LUNAS' : 'BELUM LUNAS'}</div>
+
+           <div class="table-container">
+             <table class="cost-table">
+                <thead>
+                    <tr>
+                        <th width="40%">Deskripsi</th>
+                        <th width="30%">Detail</th>
+                        <th width="30%" class="text-right">Jumlah (Rp)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Sewa Unit</td>
+                        <td>Harga harian x ${days} hari</td>
+                        <td class="text-right font-mono">${totalSewaUnit.toLocaleString('id-ID')}</td>
+                    </tr>
+                    ${driverCost > 0 ? `
+                    <tr>
+                        <td>Driver</td>
+                        <td>${driverDesc}</td>
+                        <td class="text-right font-mono">${driverCost.toLocaleString('id-ID')}</td>
+                    </tr>` : ''}
+                    ${deliveryFee > 0 ? `
+                    <tr>
+                        <td>Jasa Antar/Ambil</td>
+                        <td>Delivery Fee</td>
+                        <td class="text-right font-mono">${deliveryFee.toLocaleString('id-ID')}</td>
+                    </tr>` : ''}
+                    ${overdueFee > 0 ? `
+                    <tr>
+                        <td>Overtime</td>
+                        <td>Denda Keterlambatan</td>
+                        <td class="text-right font-mono">${overdueFee.toLocaleString('id-ID')}</td>
+                    </tr>` : ''}
+                    ${extraFee > 0 ? `
+                    <tr>
+                        <td>Biaya Extra</td>
+                        <td>${booking.extra_fee_reason || 'Lain-lain'}</td>
+                        <td class="text-right font-mono">${extraFee.toLocaleString('id-ID')}</td>
+                    </tr>` : ''}
+                </tbody>
+             </table>
            </div>
+
+           <div class="totals-container">
+             <div class="totals-box">
+                <div class="total-row main">
+                    <div>TOTAL TAGIHAN</div>
+                    <div>Rp ${booking.total_price.toLocaleString('id-ID')}</div>
+                </div>
+                <div class="total-row">
+                    <div class="total-label">Pembayaran Masuk</div>
+                    <div class="font-mono">Rp ${(booking.amount_paid || 0).toLocaleString('id-ID')}</div>
+                </div>
+                <div class="total-row">
+                    <div class="total-label">SISA TAGIHAN</div>
+                    <div class="font-mono" style="color: ${remaining > 0 ? '#b91c1c' : '#15803d'}">Rp ${remaining.toLocaleString('id-ID')}</div>
+                </div>
+                <div style="padding: 15px; text-align: center;">
+                    <span class="status-badge ${isLunas ? 'lunas' : 'belum'}">
+                        STATUS: ${isLunas ? 'LUNAS' : 'BELUM LUNAS'}
+                    </span>
+                </div>
+             </div>
+           </div>
+
+           <div class="footer">
+             <div style="margin-bottom: 15px;">
+                <div class="footer-title">Keterangan:</div>
+                <p>${booking.notes || '-'}</p>
+             </div>
+             <div style="margin-bottom: 15px;">
+                <div class="footer-title">KETENTUAN PEMBAYARAN:</div>
+                <p>${settings.invoiceFooter || 'Harap melakukan pelunasan sebelum pengambilan unit.'}</p>
+             </div>
+           </div>
+
            <script>window.print();</script>
         </body>
         </html>
@@ -200,7 +380,6 @@ export const BookingListPage: React.FC = () => {
                  <input 
                     type="date" 
                     className="border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="dd-mm-yyyy"
                     value={filterStartDate}
                     onChange={e => setFilterStartDate(e.target.value)}
                  />
@@ -208,7 +387,6 @@ export const BookingListPage: React.FC = () => {
                  <input 
                     type="date" 
                     className="border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="dd-mm-yyyy"
                     value={filterEndDate}
                     onChange={e => setFilterEndDate(e.target.value)}
                  />
@@ -329,8 +507,8 @@ export const BookingListPage: React.FC = () => {
 
                                         <div className="w-px h-6 bg-slate-200 mx-2 hidden sm:block"></div>
 
-                                        {/* Utility Buttons - Checklist Moved to First */}
-                                        <button onClick={() => handleChecklist(booking.id)} className="px-3 py-1.5 rounded text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center gap-1 transition-colors">
+                                        {/* Utility Buttons */}
+                                        <button onClick={() => handleChecklist(booking)} className="px-3 py-1.5 rounded text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center gap-1 transition-colors">
                                             <ClipboardCheck size={14}/> Checklist
                                         </button>
                                         
@@ -387,6 +565,13 @@ export const BookingListPage: React.FC = () => {
             })
           )}
       </div>
+
+      <ChecklistModal 
+        isOpen={!!checklistBooking} 
+        onClose={() => setChecklistBooking(null)} 
+        booking={checklistBooking} 
+        onSave={() => { fetchBookings(); }} 
+      />
     </div>
   );
 };

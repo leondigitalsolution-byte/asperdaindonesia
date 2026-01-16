@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
 import { useNavigate, Link, useParams, useLocation } from 'react-router-dom';
 import { bookingService } from '../../service/bookingService';
 import { carService } from '../../service/carService';
 import { customerService } from '../../service/customerService';
+import { driverService } from '../../service/driverService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
-import { Car, Customer, BookingStatus, DriverOption, AppSettings, PaymentMethod, PayLaterTerm } from '../../types';
+import { Car, Customer, Driver, BookingStatus, DriverOption, AppSettings, PaymentMethod, PayLaterTerm } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { ImageUploader } from '../../components/ImageUploader';
-import { CreditCard, Wallet, QrCode, Clock, CheckCircle } from 'lucide-react';
+import { CreditCard, Wallet, QrCode, Clock, CheckCircle, RotateCcw, User as UserIcon } from 'lucide-react';
 
 export const BookingFormPage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,6 +25,7 @@ export const BookingFormPage: React.FC = () => {
   // Data Sources
   const [cars, setCars] = useState<Car[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   // Form State
@@ -33,6 +36,7 @@ export const BookingFormPage: React.FC = () => {
   
   const [selectedCarId, setSelectedCarId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedDriverId, setSelectedDriverId] = useState(''); // NEW
   const [withDriver, setWithDriver] = useState(false);
   
   // Customer Details (Auto-fill or Manual)
@@ -57,8 +61,9 @@ export const BookingFormPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [payLaterTerm, setPayLaterTerm] = useState<PayLaterTerm>(1);
 
-  // Return / Completion
-  const [actualReturnDate, setActualReturnDate] = useState('');
+  // Return / Completion (NEW UI FIELDS)
+  const [actualReturnDateStr, setActualReturnDateStr] = useState('');
+  const [actualReturnTimeStr, setActualReturnTimeStr] = useState('');
   const [overdueFee, setOverdueFee] = useState<number>(0);
   const [extraFee, setExtraFee] = useState<number>(0);
   const [extraFeeReason, setExtraFeeReason] = useState('');
@@ -70,12 +75,14 @@ export const BookingFormPage: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const [c, cust] = await Promise.all([
+        const [c, cust, drv] = await Promise.all([
           carService.getCars(),
-          customerService.getCustomers()
+          customerService.getCustomers(),
+          driverService.getDrivers()
         ]);
         setCars(c);
         setCustomers(cust);
+        setDrivers(drv);
         
         const storedSettings = getStoredData<AppSettings>('appSettings', DEFAULT_SETTINGS);
         setSettings({ ...DEFAULT_SETTINGS, ...storedSettings });
@@ -121,6 +128,7 @@ export const BookingFormPage: React.FC = () => {
                 setSelectedCarId(booking.car_id);
                 setSelectedCustomerId(booking.customer_id);
                 setWithDriver(booking.driver_option === DriverOption.WITH_DRIVER);
+                if (booking.driver_id) setSelectedDriverId(booking.driver_id);
                 
                 setRentalPackage(booking.rental_package || '');
                 setDestination(booking.destination || '');
@@ -133,9 +141,17 @@ export const BookingFormPage: React.FC = () => {
                 
                 setDeliveryFee(booking.delivery_fee || 0);
                 setAmountPaid(booking.amount_paid || 0);
+                
+                // Return Data
                 setOverdueFee(booking.overdue_fee || 0);
                 setExtraFee(booking.extra_fee || 0);
                 setExtraFeeReason(booking.extra_fee_reason || '');
+                
+                if (booking.actual_return_date) {
+                    const actual = new Date(booking.actual_return_date);
+                    setActualReturnDateStr(actual.toISOString().split('T')[0]);
+                    setActualReturnTimeStr(actual.toTimeString().slice(0, 5));
+                }
                 
                 setStatus(booking.status);
                 
@@ -254,9 +270,16 @@ export const BookingFormPage: React.FC = () => {
         finalStatus = BookingStatus.CONFIRMED; // Or ACTIVE
     }
 
+    // Construct Actual Return Date
+    let actualReturnDate = undefined;
+    if (actualReturnDateStr && actualReturnTimeStr) {
+        actualReturnDate = `${actualReturnDateStr}T${actualReturnTimeStr}:00`;
+    }
+
     const payload = {
         car_id: selectedCarId,
         customer_id: selectedCustomerId,
+        driver_id: (withDriver && selectedDriverId) ? selectedDriverId : null, // Send driver if selected
         start_date: `${startDate}T${startTime}:00`,
         end_date: `${endDate}T${endTime}:00`,
         driver_option: withDriver ? DriverOption.WITH_DRIVER : DriverOption.LEPAS_KUNCI,
@@ -278,6 +301,7 @@ export const BookingFormPage: React.FC = () => {
         overdue_fee: overdueFee,
         extra_fee: extraFee,
         extra_fee_reason: extraFeeReason,
+        actual_return_date: actualReturnDate,
         payment_method: paymentMethod,
         
         // Custom prop for Service logic
@@ -353,6 +377,22 @@ export const BookingFormPage: React.FC = () => {
                              {withDriver && driverBasePrice > 0 && <span className="text-[10px] text-green-600">+ Rp {driverBasePrice.toLocaleString('id-ID')} / hari</span>}
                          </div>
                      </label>
+                     {/* DRIVER SELECTION DROPDOWN */}
+                     {withDriver && (
+                         <div className="mt-3 pl-8 animate-in fade-in slide-in-from-top-1">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><UserIcon size={10}/> Pilih Driver (Opsional)</label>
+                             <select 
+                                className="w-full border border-blue-200 rounded-lg p-2 text-sm text-slate-700 bg-white"
+                                value={selectedDriverId}
+                                onChange={e => setSelectedDriverId(e.target.value)}
+                             >
+                                 <option value="">-- Auto Assign / Belum Ditentukan --</option>
+                                 {drivers.map(d => (
+                                     <option key={d.id} value={d.id}>{d.full_name} ({d.status})</option>
+                                 ))}
+                             </select>
+                         </div>
+                     )}
                  </div>
                </div>
             </div>
@@ -427,13 +467,17 @@ export const BookingFormPage: React.FC = () => {
                            {selectedArea && <div className="flex justify-between text-sm mb-1 text-yellow-200"><span>Surcharge Area</span><span>Rp {((selectedArea.extraPrice + (withDriver ? selectedArea.extraDriverPrice : 0)) * duration).toLocaleString('id-ID')}</span></div>}
                            {overnightTotal > 0 && <div className="flex justify-between text-sm mb-1 text-pink-200"><span>Inap Driver</span><span>Rp {overnightTotal.toLocaleString('id-ID')}</span></div>}
                            {deliveryFee > 0 && <div className="flex justify-between text-sm mb-1"><span>Antar/Jemput</span><span>Rp {deliveryFee.toLocaleString('id-ID')}</span></div>}
+                           
+                           {/* Add Return Fees to Summary */}
+                           {overdueFee > 0 && <div className="flex justify-between text-sm mb-1 text-red-200"><span>Overdue</span><span>Rp {overdueFee.toLocaleString('id-ID')}</span></div>}
+                           {extraFee > 0 && <div className="flex justify-between text-sm mb-1 text-red-200"><span>Biaya Extra</span><span>Rp {extraFee.toLocaleString('id-ID')}</span></div>}
                        </div>
                        <div className="pt-4 border-t border-blue-500 mt-2 flex justify-between items-end"><span className="font-bold text-lg">TOTAL</span><span className="font-bold text-2xl">Rp {totalCost.toLocaleString('id-ID')}</span></div>
                    </div>
                </div>
             </div>
 
-            {/* SECTION 4: PEMBAYARAN (ENHANCED) */}
+            {/* SECTION 4: PEMBAYARAN */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                  <Wallet className="text-blue-600" size={16}/> 3. Metode Pembayaran
@@ -514,6 +558,72 @@ export const BookingFormPage: React.FC = () => {
                        </div>
                    </div>
                )}
+            </div>
+
+            {/* SECTION 5: PENGEMBALIAN UNIT (Return) - NEW SECTION */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
+                    <RotateCcw className="text-blue-600" size={16}/> 4. PENGEMBALIAN UNIT
+                </h3>
+                
+                {/* Row 1: Date/Time & Overdue */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">TGL & JAM KEMBALI (AKTUAL)</label>
+                        <div className="flex gap-2">
+                            <input 
+                                type="date" 
+                                className="w-full border rounded-lg p-2.5 text-sm font-bold text-slate-700" 
+                                value={actualReturnDateStr} 
+                                onChange={e => setActualReturnDateStr(e.target.value)} 
+                            />
+                            <input 
+                                type="time" 
+                                className="w-24 border rounded-lg p-2.5 text-sm font-bold text-slate-700" 
+                                value={actualReturnTimeStr} 
+                                onChange={e => setActualReturnTimeStr(e.target.value)} 
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">BIAYA OVERDUE (AUTO/MANUAL)</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">Rp</span>
+                            <input 
+                                type="number" 
+                                className="w-full pl-10 border rounded-lg p-2.5 text-sm font-bold text-slate-800"
+                                value={overdueFee} 
+                                onChange={e => setOverdueFee(Number(e.target.value))} 
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Row 2: Extra Fee */}
+                <div className="mb-4">
+                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">NOMINAL BIAYA EXTRA</label>
+                     <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">Rp</span>
+                        <input 
+                            type="number" 
+                            className="w-full pl-10 border rounded-lg p-2.5 text-sm font-bold text-slate-800"
+                            value={extraFee} 
+                            onChange={e => setExtraFee(Number(e.target.value))} 
+                        />
+                    </div>
+                </div>
+
+                {/* Row 3: Reason */}
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">KETERANGAN BIAYA EXTRA</label>
+                    <textarea 
+                        className="w-full border rounded-lg p-2.5 text-sm text-slate-700"
+                        rows={2}
+                        placeholder="Contoh: Unit kotor berlebih (cuci salon), bensin kurang 1 bar, baret ringan, dll"
+                        value={extraFeeReason}
+                        onChange={e => setExtraFeeReason(e.target.value)}
+                    />
+                </div>
             </div>
 
             {/* ACTION BAR */}

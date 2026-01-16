@@ -6,6 +6,33 @@ import { payLaterService } from './payLaterService';
 
 export const bookingService = {
   /**
+   * Upload checklist image
+   */
+  uploadChecklistImage: async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `check_${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('checklist-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+        // Fallback to car-images if checklist-images not ready
+        const { error: fallbackError } = await supabase.storage
+            .from('car-images')
+            .upload(filePath, file);
+        
+        if (fallbackError) throw new Error(`Upload Failed: ${uploadError.message}`);
+        const { data } = supabase.storage.from('car-images').getPublicUrl(filePath);
+        return data.publicUrl;
+    }
+
+    const { data } = supabase.storage.from('checklist-images').getPublicUrl(filePath);
+    return data.publicUrl;
+  },
+
+  /**
    * Check for overlapping bookings
    */
   checkAvailability: async (carId: string, startDate: string, endDate: string, excludeBookingId?: string) => {
@@ -29,9 +56,10 @@ export const bookingService = {
   },
 
   /**
-   * Create a new booking with overbooking protection, extended fields, and PayLater logic
+   * Create a new booking
+   * Updated Type Definition to explicitly include driver_id
    */
-  createBooking: async (bookingData: Omit<Booking, 'id' | 'company_id' | 'created_at' | 'cars' | 'customers'> & { paylater_term?: number }) => {
+  createBooking: async (bookingData: Omit<Booking, 'id' | 'company_id' | 'created_at' | 'cars' | 'customers' | 'drivers'> & { paylater_term?: number }) => {
     const profile = await authService.getUserProfile();
     
     if (!profile?.company_id) {
@@ -49,13 +77,13 @@ export const bookingService = {
       throw new Error("Mobil tidak tersedia pada tanggal yang dipilih (Overbooked). Silakan pilih tanggal atau unit lain.");
     }
 
-    // 2. Insert Booking
-    const { data: booking, error } = await supabase
-      .from('bookings')
-      .insert({
+    // 2. Prepare Payload
+    // Ensure all optional fields are handled or undefined
+    const payload = {
         company_id: profile.company_id,
         car_id: bookingData.car_id,
         customer_id: bookingData.customer_id,
+        driver_id: bookingData.driver_id || null, // Explicit null for DB
         start_date: bookingData.start_date,
         end_date: bookingData.end_date,
         
@@ -63,6 +91,12 @@ export const bookingService = {
         total_price: bookingData.total_price,
         delivery_fee: bookingData.delivery_fee,
         amount_paid: bookingData.amount_paid,
+        
+        // Extra Fees & Return
+        extra_fee: bookingData.extra_fee || 0,
+        extra_fee_reason: bookingData.extra_fee_reason || '',
+        overdue_fee: bookingData.overdue_fee || 0,
+        actual_return_date: bookingData.actual_return_date,
         
         // Status & Options
         status: bookingData.status || BookingStatus.PENDING,
@@ -80,16 +114,22 @@ export const bookingService = {
         deposit_image_url: bookingData.deposit_image_url,
 
         // Payment
-        payment_method: bookingData.payment_method
-      })
+        payment_method: bookingData.payment_method || PaymentMethod.CASH
+    };
+
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .insert(payload)
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+        console.error("Booking Insert Error:", error);
+        throw new Error(`Gagal menyimpan booking: ${error.message}`);
+    }
 
     // 3. Handle PayLater Record Creation
     if (bookingData.payment_method === PaymentMethod.PAYLATER && booking && bookingData.paylater_term) {
-        // Get DPC ID from company
         const { data: companyData } = await supabase
             .from('companies')
             .select('dpc_id')
@@ -129,9 +169,15 @@ export const bookingService = {
           brand,
           model,
           license_plate,
-          image_url
+          image_url,
+          price_per_day
         ),
         customers (
+          full_name,
+          phone,
+          address
+        ),
+        drivers (
           full_name,
           phone
         )
@@ -154,9 +200,15 @@ export const bookingService = {
         cars (
           brand,
           model,
-          license_plate
+          license_plate,
+          price_per_day
         ),
         customers (
+          full_name,
+          phone,
+          address
+        ),
+        drivers (
           full_name,
           phone
         )
@@ -172,7 +224,7 @@ export const bookingService = {
    * Update booking
    */
   updateBooking: async (id: string, updates: Partial<Booking>) => {
-    // If dates are changing, check availability (excluding self)
+    // Availability Check for Date Changes
     if (updates.car_id && updates.start_date && updates.end_date) {
         const isAvailable = await bookingService.checkAvailability(
             updates.car_id,
@@ -185,13 +237,15 @@ export const bookingService = {
         }
     }
 
-    // Clean up joined fields that shouldn't be sent to DB
+    // Clean up payload
     const payload: any = { ...updates };
     delete payload.cars;
     delete payload.customers;
+    delete payload.drivers;
     delete payload.id;
     delete payload.company_id;
     delete payload.created_at;
+    delete payload.paylater_term;
 
     const { data, error } = await supabase
       .from('bookings')

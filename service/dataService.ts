@@ -33,6 +33,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     // Global Defaults
     globalLogoUrl: '',
     globalBackgroundUrl: 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=1470&auto=format&fit=crop',
+    
+    // Auth Page Customization Defaults
+    authTitle: 'ASPERDA | SURABAYA',
+    authSubtitle: 'Sistem Manajemen Asosiasi Rental Daerah',
+    authQuote: '"Platform digital terintegrasi untuk menghubungkan dan memberdayakan pengusaha rental mobil profesional di seluruh Indonesia."',
 
     carCategories: ['MPV', 'SUV', 'Sedan', 'Luxury', 'Bus'],
     rentalPackages: ['12 Jam (Dalam Kota)', '24 Jam (Dalam Kota)', 'Full Day (Luar Kota)'],

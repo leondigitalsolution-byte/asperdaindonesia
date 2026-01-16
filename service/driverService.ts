@@ -12,13 +12,20 @@ export const driverService = {
     const fileName = `driver_${Math.random().toString(36).substring(2)}.${fileExt}`;
     const filePath = `${fileName}`;
 
-    // Ensure bucket 'driver-images' exists in your Supabase storage
     const { error: uploadError } = await supabase.storage
-      .from('driver-images') // You might need to create this bucket or use 'car-images' if lazy
+      .from('driver-images') 
       .upload(filePath, file);
 
     if (uploadError) {
-      throw new Error(`Upload Failed: ${uploadError.message}`);
+      // Fallback: try car-images if driver-images bucket is missing
+      const { error: fallbackError } = await supabase.storage
+        .from('car-images')
+        .upload(filePath, file);
+        
+      if (fallbackError) throw new Error(`Upload Failed: ${uploadError.message}`);
+      
+      const { data } = supabase.storage.from('car-images').getPublicUrl(filePath);
+      return data.publicUrl;
     }
 
     const { data } = supabase.storage.from('driver-images').getPublicUrl(filePath);
@@ -36,7 +43,12 @@ export const driverService = {
       .order('created_at', { ascending: false });
 
     if (error) throw new Error(error.message);
-    return data as Driver[];
+    
+    // Map DB snake_case to TS camelCase
+    return data.map((d: any) => ({
+        ...d,
+        dailyRate: d.daily_rate
+    })) as Driver[];
   },
 
   getDriverById: async (id: string): Promise<Driver> => {
@@ -47,7 +59,12 @@ export const driverService = {
       .single();
 
     if (error) throw new Error(error.message);
-    return data as Driver;
+    
+    // Map DB snake_case to TS camelCase
+    return {
+        ...data,
+        dailyRate: data.daily_rate
+    } as Driver;
   },
 
   createDriver: async (
@@ -59,8 +76,6 @@ export const driverService = {
 
     let imageUrl = null;
     if (imageFile) {
-        // Fallback to car-images if driver-images doesn't exist, strictly speaking we should handle buckets
-        // Assuming user has created the bucket or uses the same logic
         try {
             imageUrl = await driverService.uploadDriverImage(imageFile);
         } catch(e) {
@@ -68,13 +83,20 @@ export const driverService = {
         }
     }
 
+    // Explicit Mapping: dailyRate -> daily_rate
+    // We separate dailyRate from the rest to prevent sending it as 'dailyRate' column
+    const { dailyRate, ...rest } = driverData;
+
+    const dbPayload = {
+        company_id: profile.company_id,
+        ...rest,
+        daily_rate: dailyRate || 0, // Map here
+        image_url: imageUrl
+    };
+
     const { data, error } = await supabase
       .from('drivers')
-      .insert({
-        company_id: profile.company_id,
-        ...driverData,
-        image_url: imageUrl
-      })
+      .insert(dbPayload)
       .select()
       .single();
 
@@ -87,14 +109,20 @@ export const driverService = {
     driverData: Partial<Driver>,
     imageFile?: File | null
   ) => {
-    let updates: any = { ...driverData };
+    // Map camelCase to snake_case for update
+    const { dailyRate, ...rest } = driverData;
+    let updates: any = { ...rest };
+
+    if (dailyRate !== undefined) {
+        updates.daily_rate = dailyRate;
+    }
 
     if (imageFile) {
         const imageUrl = await driverService.uploadDriverImage(imageFile);
         updates.image_url = imageUrl;
     }
 
-    // cleanup
+    // cleanup read-only fields
     delete updates.id;
     delete updates.company_id;
     delete updates.created_at;

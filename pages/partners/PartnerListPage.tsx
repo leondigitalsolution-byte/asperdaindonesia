@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link } from 'react-router-dom';
 import { partnerService } from '../../service/partnerService';
 import { Partner } from '../../types';
@@ -179,10 +180,10 @@ export const PartnerListPage: React.FC = () => {
                                 ))}
                             </ul>
                         ) : (
-                            <p className="text-sm text-slate-400 italic flex items-center gap-2">
+                            <div className="text-sm text-slate-400 italic flex items-center gap-2">
                                 <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
                                 Belum ada unit.
-                            </p>
+                            </div>
                         )}
                     </div>
 

@@ -27,7 +27,6 @@ import { HighSeasonPage } from './pages/high-season/HighSeasonPage';
 import { AdminMemberApprovalPage } from './pages/admin/AdminMemberApprovalPage';
 import { AdminBlacklistReviewPage } from './pages/admin/AdminBlacklistReviewPage';
 import { AdminDpcManagementPage } from './pages/admin/AdminDpcManagementPage';
-import { AdminPayLaterPage } from './pages/admin/AdminPayLaterPage'; // NEW
 
 // Koperasi Pages
 import { CoopMemberListPage } from './pages/coop/CoopMemberListPage';
@@ -178,7 +177,6 @@ const App: React.FC = () => {
           <Route path="admin/members" element={<AdminMemberApprovalPage />} />
           <Route path="admin/blacklist-review" element={<AdminBlacklistReviewPage />} />
           <Route path="admin/dpc" element={<AdminDpcManagementPage />} />
-          <Route path="admin/paylater" element={<AdminPayLaterPage />} /> {/* NEW */}
           
           {/* Koperasi Routes */}
           <Route path="coop" element={<CoopMemberListPage />} />

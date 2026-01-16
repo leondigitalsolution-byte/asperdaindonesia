@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../../service/authService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
@@ -48,14 +49,22 @@ export const LoginPage: React.FC = () => {
       {/* LEFT SIDE - BRANDING PANEL */}
       <div className="hidden lg:flex lg:w-[55%] bg-[#0B1120] relative flex-col justify-between p-16 text-white overflow-hidden">
         
-        {/* Ambient Background Effects */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-900/20 rounded-full blur-[120px] -mr-40 -mt-40 pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-900/20 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none"></div>
+        {/* Background Image Layer (If configured) */}
+        {settings.globalBackgroundUrl && (
+            <div className="absolute inset-0 z-0">
+               <img src={settings.globalBackgroundUrl} className="w-full h-full object-cover opacity-20" alt="Login Background" />
+               <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-transparent to-[#0B1120] opacity-80"></div>
+            </div>
+        )}
+
+        {/* Ambient Background Effects (Fallback if no image or blended) */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-900/20 rounded-full blur-[120px] -mr-40 -mt-40 pointer-events-none z-0"></div>
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-900/20 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none z-0"></div>
 
         {/* Top Header */}
         <div className="relative z-10">
-           <h1 className="text-3xl font-bold tracking-tight mb-2 text-white">ASPERDA | SURABAYA</h1>
-           <p className="text-slate-400 text-sm tracking-wide">Sistem Manajemen Asosiasi Rental Daerah</p>
+           <h1 className="text-3xl font-bold tracking-tight mb-2 text-white uppercase">{settings.authTitle || 'ASPERDA | SURABAYA'}</h1>
+           <p className="text-slate-400 text-sm tracking-wide">{settings.authSubtitle || 'Sistem Manajemen Asosiasi Rental Daerah'}</p>
         </div>
 
         {/* Center Emblem/Logo */}
@@ -81,7 +90,7 @@ export const LoginPage: React.FC = () => {
         {/* Bottom Content */}
         <div className="relative z-10 space-y-8">
            <blockquote className="text-lg font-light italic text-slate-300 leading-relaxed border-l-4 border-blue-600 pl-6">
-             "Platform digital terintegrasi untuk menghubungkan dan memberdayakan pengusaha rental mobil profesional di seluruh Indonesia."
+             {settings.authQuote || '"Platform digital terintegrasi untuk menghubungkan dan memberdayakan pengusaha rental mobil profesional di seluruh Indonesia."'}
            </blockquote>
            
            <div className="pt-6 border-t border-slate-800 flex items-center gap-4">

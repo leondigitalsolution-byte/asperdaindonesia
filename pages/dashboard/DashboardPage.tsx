@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { dashboardService, DashboardStats } from '../../service/dashboardService';
 import { authService } from '../../service/authService';
-import { Profile } from '../../types';
+import { Profile, BookingStatus } from '../../types';
 import { Button } from '../../components/ui/Button';
+// @ts-ignore
 import { Link } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Calendar State
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     const loadData = async () => {
@@ -28,6 +33,32 @@ const DashboardPage: React.FC = () => {
     };
     loadData();
   }, []);
+
+  // --- CALENDAR LOGIC ---
+  const getDaysInMonth = (date: Date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const days = Array.from({ length: getDaysInMonth(currentDate) }, (_, i) => i + 1);
+  const monthName = currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+
+  // Only simplified filtering for visual representation on dashboard
+  // We filter the already fetched bookings against the specific day
+  const isDateBooked = (carId: string, day: number) => {
+    if (!stats?.monthBookings) return null;
+
+    const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    checkDate.setHours(12, 0, 0, 0);
+
+    return stats.monthBookings.find(b => {
+      if (b.car_id !== carId) return false;
+      const start = new Date(b.start_date);
+      const end = new Date(b.end_date);
+      start.setHours(0,0,0,0);
+      end.setHours(23,59,59,999);
+      return checkDate >= start && checkDate <= end;
+    });
+  };
 
   if (loading) {
     return (
@@ -110,6 +141,89 @@ const DashboardPage: React.FC = () => {
           <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center text-xl">
              <i className="fas fa-chart-line"></i>
           </div>
+        </div>
+      </div>
+
+      {/* GANTT CHART WIDGET */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
+          <div>
+             <h3 className="font-bold text-slate-800 flex items-center gap-2">
+               <Calendar size={18} className="text-indigo-600"/> Jadwal Unit (Gantt Chart)
+             </h3>
+             <p className="text-xs text-slate-500">Monitoring ketersediaan unit bulan ini.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
+             <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="p-1 hover:bg-slate-100 rounded text-slate-600"><ChevronLeft size={16}/></button>
+             <span className="text-sm font-bold text-slate-800 min-w-[120px] text-center">{monthName}</span>
+             <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="p-1 hover:bg-slate-100 rounded text-slate-600"><ChevronRight size={16}/></button>
+          </div>
+        </div>
+        
+        <div className="overflow-x-auto">
+           {(!stats?.cars || stats.cars.length === 0) ? (
+              <div className="p-8 text-center text-slate-400 text-sm">Belum ada data unit mobil.</div>
+           ) : (
+              <div className="inline-block min-w-full">
+                 <table className="min-w-full border-collapse">
+                    <thead>
+                       <tr>
+                          <th className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-200 px-4 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wide min-w-[180px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Unit Mobil</th>
+                          {days.map(day => {
+                             const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
+                             const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+                             const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                             return (
+                                <th key={day} className={`border-b border-r border-slate-100 px-1 py-2 text-center text-[10px] font-bold min-w-[30px] ${isToday ? 'bg-blue-100 text-blue-800' : isWeekend ? 'text-red-400 bg-slate-50' : 'text-slate-500'}`}>
+                                   {day}
+                                </th>
+                             )
+                          })}
+                       </tr>
+                    </thead>
+                    <tbody>
+                       {stats.cars.map(car => (
+                          <tr key={car.id} className="hover:bg-slate-50 transition-colors">
+                             <td className="sticky left-0 z-10 bg-white border-b border-r border-slate-200 px-4 py-3 text-xs font-bold text-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                <div className="truncate max-w-[160px]">{car.brand} {car.model}</div>
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{car.license_plate}</div>
+                             </td>
+                             {days.map(day => {
+                                const booking = isDateBooked(car.id, day);
+                                let barClass = "";
+                                
+                                if (booking) {
+                                   if (booking.status === BookingStatus.ACTIVE) barClass = "bg-green-500";
+                                   else if (booking.status === BookingStatus.CONFIRMED) barClass = "bg-blue-500";
+                                   else if (booking.status === BookingStatus.PENDING) barClass = "bg-amber-400";
+                                   else if (booking.status === BookingStatus.COMPLETED) barClass = "bg-slate-400";
+                                }
+
+                                return (
+                                   <td key={day} className="border-b border-r border-slate-100 px-0.5 py-1 h-10 relative group">
+                                      {booking && (
+                                         <div 
+                                            className={`w-full h-6 rounded-sm ${barClass} cursor-help transition-opacity hover:opacity-80`}
+                                            title={`${booking.customers?.full_name} (${booking.status})`}
+                                         ></div>
+                                      )}
+                                   </td>
+                                )
+                             })}
+                          </tr>
+                       ))}
+                    </tbody>
+                 </table>
+              </div>
+           )}
+        </div>
+        <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex gap-4 text-[10px] font-bold text-slate-500 uppercase">
+           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-green-500 rounded-sm"></div> Sedang Jalan</div>
+           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-sm"></div> Confirmed</div>
+           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-amber-400 rounded-sm"></div> Pending</div>
+           <div className="flex-1 text-right normal-case">
+              <Link to="/dashboard/calendar" className="text-indigo-600 hover:underline">Lihat Kalender Lengkap &rarr;</Link>
+           </div>
         </div>
       </div>
 

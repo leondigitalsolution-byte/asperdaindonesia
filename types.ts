@@ -78,6 +78,7 @@ export interface PayLaterRecord {
   bookings?: Booking;
   companies?: Company;
   customers?: Customer;
+  dpc_regions?: DpcRegion;
 }
 // --------------------------
 
@@ -125,8 +126,16 @@ export interface AppSettings {
     themeColor?: string;
     darkMode?: boolean;
     invoiceFooter?: string;
+    
+    // Global Styling
     globalLogoUrl?: string;
     globalBackgroundUrl?: string;
+    
+    // Auth Page Customization
+    authTitle?: string;
+    authSubtitle?: string;
+    authQuote?: string;
+
     carCategories: string[];
     rentalPackages: string[];
     coverageAreas: CoverageArea[]; 
@@ -264,6 +273,7 @@ export interface Booking {
   company_id: string;
   car_id: string;
   customer_id: string;
+  driver_id?: string; // Add driver_id explicitly
   start_date: string;
   end_date: string;
   total_price: number;
@@ -284,10 +294,11 @@ export interface Booking {
   overdue_fee?: number;
   extra_fee?: number;
   extra_fee_reason?: string;
-  payment_method?: PaymentMethod; // NEW FIELD
+  payment_method?: PaymentMethod; 
   created_at?: string;
   cars?: Car;
   customers?: Customer;
+  drivers?: Driver; 
 }
 
 export interface FinanceRecord {

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link } from 'react-router-dom';
 import { authService } from '../../service/authService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
