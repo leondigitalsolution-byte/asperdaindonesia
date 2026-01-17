@@ -6,11 +6,12 @@ import { bookingService } from '../../service/bookingService';
 import { carService } from '../../service/carService';
 import { customerService } from '../../service/customerService';
 import { driverService } from '../../service/driverService';
+import { highSeasonService } from '../../service/highSeasonService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
-import { Car, Customer, Driver, BookingStatus, DriverOption, AppSettings, PaymentMethod, PayLaterTerm } from '../../types';
+import { Car, Customer, Driver, BookingStatus, DriverOption, AppSettings, PaymentMethod, PayLaterTerm, HighSeason } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { ImageUploader } from '../../components/ImageUploader';
-import { CreditCard, Wallet, QrCode, Clock, CheckCircle, RotateCcw, User as UserIcon } from 'lucide-react';
+import { CreditCard, Wallet, QrCode, Clock, CheckCircle, RotateCcw, User as UserIcon, Calendar } from 'lucide-react';
 
 export const BookingFormPage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,7 +27,12 @@ export const BookingFormPage: React.FC = () => {
   const [cars, setCars] = useState<Car[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [highSeasons, setHighSeasons] = useState<HighSeason[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  // Availability State
+  const [unavailableCarIds, setUnavailableCarIds] = useState<string[]>([]);
+  const [unavailableDriverIds, setUnavailableDriverIds] = useState<string[]>([]);
 
   // Form State
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -36,14 +42,14 @@ export const BookingFormPage: React.FC = () => {
   
   const [selectedCarId, setSelectedCarId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [selectedDriverId, setSelectedDriverId] = useState(''); // NEW
+  const [selectedDriverId, setSelectedDriverId] = useState(''); 
   const [withDriver, setWithDriver] = useState(false);
   
   // Customer Details (Auto-fill or Manual)
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [rentalPackage, setRentalPackage] = useState('');
-  const [destination, setDestination] = useState(''); // Stores Coverage Area ID or custom text
+  const [destination, setDestination] = useState(''); 
   const [notes, setNotes] = useState('');
 
   // Security Deposit
@@ -61,7 +67,7 @@ export const BookingFormPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [payLaterTerm, setPayLaterTerm] = useState<PayLaterTerm>(1);
 
-  // Return / Completion (NEW UI FIELDS)
+  // Return / Completion
   const [actualReturnDateStr, setActualReturnDateStr] = useState('');
   const [actualReturnTimeStr, setActualReturnTimeStr] = useState('');
   const [overdueFee, setOverdueFee] = useState<number>(0);
@@ -75,14 +81,16 @@ export const BookingFormPage: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const [c, cust, drv] = await Promise.all([
+        const [c, cust, drv, hs] = await Promise.all([
           carService.getCars(),
           customerService.getCustomers(),
-          driverService.getDrivers()
+          driverService.getDrivers(),
+          highSeasonService.getHighSeasons()
         ]);
         setCars(c);
         setCustomers(cust);
         setDrivers(drv);
+        setHighSeasons(hs);
         
         const storedSettings = getStoredData<AppSettings>('appSettings', DEFAULT_SETTINGS);
         setSettings({ ...DEFAULT_SETTINGS, ...storedSettings });
@@ -142,7 +150,6 @@ export const BookingFormPage: React.FC = () => {
                 setDeliveryFee(booking.delivery_fee || 0);
                 setAmountPaid(booking.amount_paid || 0);
                 
-                // Return Data
                 setOverdueFee(booking.overdue_fee || 0);
                 setExtraFee(booking.extra_fee || 0);
                 setExtraFeeReason(booking.extra_fee_reason || '');
@@ -155,7 +162,6 @@ export const BookingFormPage: React.FC = () => {
                 
                 setStatus(booking.status);
                 
-                // Payment Method
                 if (booking.payment_method) {
                     setPaymentMethod(booking.payment_method);
                 }
@@ -170,6 +176,34 @@ export const BookingFormPage: React.FC = () => {
         loadBooking();
     }
   }, [id, isEditMode]);
+
+  // Check Availability when Dates Change
+  useEffect(() => {
+      const checkAvailability = async () => {
+          if (!startDate || !endDate) return;
+          
+          const start = `${startDate}T${startTime}:00`;
+          const end = `${endDate}T${endTime}:00`;
+          
+          // Don't check if date range invalid
+          if (new Date(end) <= new Date(start)) return;
+
+          try {
+              // Pass current booking ID to exclude it from the check (if editing)
+              const resources = await bookingService.getUnavailableResources(start, end, isEditMode ? id : undefined);
+              setUnavailableCarIds(resources.carIds);
+              setUnavailableDriverIds(resources.driverIds);
+          } catch (e) {
+              console.error("Availability check failed", e);
+          }
+      };
+
+      const timer = setTimeout(() => {
+          checkAvailability();
+      }, 500); // Debounce
+
+      return () => clearTimeout(timer);
+  }, [startDate, startTime, endDate, endTime, isEditMode, id]);
 
   useEffect(() => {
     if (selectedCarId) {
@@ -194,6 +228,33 @@ export const BookingFormPage: React.FC = () => {
     const end = new Date(`${endDate}T${endTime}`);
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+    // High Season Calculation
+    let highSeasonSurcharge = 0;
+    if (highSeasons.length > 0) {
+        let currentDate = new Date(start);
+        // Normalize time
+        currentDate.setHours(0,0,0,0);
+        const endDateNormalized = new Date(end);
+        endDateNormalized.setHours(0,0,0,0);
+
+        // Iterate through each calendar day of the booking
+        for (let i = 0; i < diffDays; i++) {
+            const checkTime = currentDate.getTime();
+            // Find if this day falls in any high season
+            const season = highSeasons.find(hs => {
+                const s = new Date(hs.startDate).setHours(0,0,0,0);
+                const e = new Date(hs.endDate).setHours(23,59,59,999);
+                return checkTime >= s && checkTime <= e;
+            });
+
+            if (season) {
+                highSeasonSurcharge += season.priceIncrease;
+            }
+            // Move to next day
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+    }
 
     let areaRentSurcharge = 0;
     let areaDriverSurcharge = 0;
@@ -228,8 +289,8 @@ export const BookingFormPage: React.FC = () => {
         overnightTotal = nights * (settings.driverOvernightPrice || 150000);
     }
 
-    const total = baseTotal + deliveryFee + overdueFee + extraFee + overnightTotal;
-    return { total, nights, overnightTotal, driverBasePrice };
+    const total = baseTotal + deliveryFee + overdueFee + extraFee + overnightTotal + highSeasonSurcharge;
+    return { total, nights, overnightTotal, driverBasePrice, highSeasonSurcharge };
   };
 
   const getAreaDetails = () => {
@@ -237,7 +298,7 @@ export const BookingFormPage: React.FC = () => {
       return settings.coverageAreas.find(a => a.id === destination);
   };
 
-  const { total: totalCost, nights, overnightTotal, driverBasePrice } = calculateTotal();
+  const { total: totalCost, nights, overnightTotal, driverBasePrice, highSeasonSurcharge } = calculateTotal();
   const selectedArea = getAreaDetails();
 
   // Effect to auto-fill amount paid for PayLater
@@ -264,13 +325,24 @@ export const BookingFormPage: React.FC = () => {
         return;
     }
 
+    if (unavailableCarIds.includes(selectedCarId) && !isEditMode) {
+        setError("Mobil yang dipilih sudah terjadwal pada tanggal tersebut. Silakan pilih unit lain.");
+        setLoading(false);
+        return;
+    }
+
+    if (withDriver && selectedDriverId && unavailableDriverIds.includes(selectedDriverId) && !isEditMode) {
+        setError("Driver yang dipilih sudah terjadwal. Silakan pilih driver lain.");
+        setLoading(false);
+        return;
+    }
+
     // Adjust Status automatically for PayLater
     let finalStatus = status;
     if (!isEditMode && paymentMethod === PaymentMethod.PAYLATER) {
-        finalStatus = BookingStatus.CONFIRMED; // Or ACTIVE
+        finalStatus = BookingStatus.CONFIRMED; 
     }
 
-    // Construct Actual Return Date
     let actualReturnDate = undefined;
     if (actualReturnDateStr && actualReturnTimeStr) {
         actualReturnDate = `${actualReturnDateStr}T${actualReturnTimeStr}:00`;
@@ -279,7 +351,7 @@ export const BookingFormPage: React.FC = () => {
     const payload = {
         car_id: selectedCarId,
         customer_id: selectedCustomerId,
-        driver_id: (withDriver && selectedDriverId) ? selectedDriverId : null, // Send driver if selected
+        driver_id: (withDriver && selectedDriverId) ? selectedDriverId : null,
         start_date: `${startDate}T${startTime}:00`,
         end_date: `${endDate}T${endTime}:00`,
         driver_option: withDriver ? DriverOption.WITH_DRIVER : DriverOption.LEPAS_KUNCI,
@@ -304,7 +376,6 @@ export const BookingFormPage: React.FC = () => {
         actual_return_date: actualReturnDate,
         payment_method: paymentMethod,
         
-        // Custom prop for Service logic
         paylater_term: paymentMethod === PaymentMethod.PAYLATER ? payLaterTerm : undefined
     };
 
@@ -346,7 +417,7 @@ export const BookingFormPage: React.FC = () => {
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                  <Clock className="text-blue-600" size={16}/> Waktu & Unit
                </h3>
-               {/* Date Inputs - Same as before */}
+               {/* Date Inputs */}
                <div className="space-y-4">
                  <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mulai Sewa</label>
@@ -364,10 +435,23 @@ export const BookingFormPage: React.FC = () => {
                  </div>
                  <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Pilih Mobil</label>
-                    <select className="w-full border rounded-lg p-3 text-sm font-bold text-slate-700 bg-slate-50" value={selectedCarId} onChange={e => setSelectedCarId(e.target.value)} required>
+                    <select 
+                        className="w-full border rounded-lg p-3 text-sm font-bold text-slate-700 bg-slate-50" 
+                        value={selectedCarId} 
+                        onChange={e => setSelectedCarId(e.target.value)} 
+                        required
+                    >
                         <option value="">-- Pilih unit armada --</option>
-                        {cars.map(c => <option key={c.id} value={c.id}>{c.brand} {c.model} - {c.license_plate}</option>)}
+                        {cars.map(c => {
+                            const isUnavailable = unavailableCarIds.includes(c.id);
+                            return (
+                                <option key={c.id} value={c.id} disabled={isUnavailable}>
+                                    {isUnavailable ? '[TERPAKAI] ' : ''}{c.brand} {c.model} - {c.license_plate}
+                                </option>
+                            );
+                        })}
                     </select>
+                    {unavailableCarIds.includes(selectedCarId) && <p className="text-xs text-red-500 mt-1">Mobil ini sudah dibooking pada tanggal tersebut.</p>}
                  </div>
                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 mt-2">
                      <label className="flex items-center gap-3 cursor-pointer">
@@ -387,10 +471,16 @@ export const BookingFormPage: React.FC = () => {
                                 onChange={e => setSelectedDriverId(e.target.value)}
                              >
                                  <option value="">-- Auto Assign / Belum Ditentukan --</option>
-                                 {drivers.map(d => (
-                                     <option key={d.id} value={d.id}>{d.full_name} ({d.status})</option>
-                                 ))}
+                                 {drivers.map(d => {
+                                     const isUnavailable = unavailableDriverIds.includes(d.id);
+                                     return (
+                                        <option key={d.id} value={d.id} disabled={isUnavailable}>
+                                            {isUnavailable ? '[TERPAKAI] ' : ''}{d.full_name} ({d.status})
+                                        </option>
+                                     );
+                                 })}
                              </select>
+                             {unavailableDriverIds.includes(selectedDriverId) && <p className="text-xs text-red-500 mt-1">Driver ini sudah ada jadwal lain.</p>}
                          </div>
                      )}
                  </div>
@@ -399,7 +489,6 @@ export const BookingFormPage: React.FC = () => {
 
             {/* SECTION: JAMINAN */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-               {/* Same as before */}
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">Jaminan</h3>
                <div className="flex bg-slate-100 p-1 rounded-lg mb-4">
                    <button type="button" className={`flex-1 py-1.5 text-xs font-bold rounded-md ${depositType === 'barang' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`} onClick={() => setDepositType('barang')}>Barang / Dokumen</button>
@@ -418,7 +507,6 @@ export const BookingFormPage: React.FC = () => {
             
             {/* SECTION 2: DATA PELANGGAN */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-               {/* Same as before */}
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2">1. Data Pelanggan & Tujuan</h3>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -428,7 +516,16 @@ export const BookingFormPage: React.FC = () => {
                           {customers.map(c => <option key={c.id} value={c.id}>{c.full_name} - {c.nik}</option>)}
                       </select>
                   </div>
-                  <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nama</label><input className="w-full border rounded-lg p-2.5 text-sm bg-slate-50" value={customerName} readOnly/></div>
+                  {/* Changed Label from Nama to Nomor WhatsApp and Value from Name to Phone */}
+                  <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nomor WhatsApp</label>
+                      <input 
+                        className="w-full border rounded-lg p-2.5 text-sm bg-slate-50 font-mono text-slate-700" 
+                        value={customerPhone} 
+                        readOnly
+                        placeholder="Pilih Pelanggan..."
+                      />
+                  </div>
                   <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Wilayah Tujuan</label>
                       <select className="w-full border rounded-lg p-2.5 text-sm font-bold bg-white" value={destination} onChange={e => setDestination(e.target.value)}>
@@ -466,9 +563,17 @@ export const BookingFormPage: React.FC = () => {
                            {withDriver && driverBasePrice > 0 && <div className="flex justify-between text-sm mb-1 text-green-200"><span>Driver</span><span>Rp {(driverBasePrice * duration).toLocaleString('id-ID')}</span></div>}
                            {selectedArea && <div className="flex justify-between text-sm mb-1 text-yellow-200"><span>Surcharge Area</span><span>Rp {((selectedArea.extraPrice + (withDriver ? selectedArea.extraDriverPrice : 0)) * duration).toLocaleString('id-ID')}</span></div>}
                            {overnightTotal > 0 && <div className="flex justify-between text-sm mb-1 text-pink-200"><span>Inap Driver</span><span>Rp {overnightTotal.toLocaleString('id-ID')}</span></div>}
+                           
+                           {/* High Season Rincian */}
+                           {highSeasonSurcharge > 0 && (
+                               <div className="flex justify-between text-sm mb-1 text-orange-300 font-bold bg-orange-900/20 px-1 rounded">
+                                   <span className="flex items-center gap-1"><Calendar size={12}/> High Season</span>
+                                   <span>Rp {highSeasonSurcharge.toLocaleString('id-ID')}</span>
+                               </div>
+                           )}
+
                            {deliveryFee > 0 && <div className="flex justify-between text-sm mb-1"><span>Antar/Jemput</span><span>Rp {deliveryFee.toLocaleString('id-ID')}</span></div>}
                            
-                           {/* Add Return Fees to Summary */}
                            {overdueFee > 0 && <div className="flex justify-between text-sm mb-1 text-red-200"><span>Overdue</span><span>Rp {overdueFee.toLocaleString('id-ID')}</span></div>}
                            {extraFee > 0 && <div className="flex justify-between text-sm mb-1 text-red-200"><span>Biaya Extra</span><span>Rp {extraFee.toLocaleString('id-ID')}</span></div>}
                        </div>
@@ -560,13 +665,12 @@ export const BookingFormPage: React.FC = () => {
                )}
             </div>
 
-            {/* SECTION 5: PENGEMBALIAN UNIT (Return) - NEW SECTION */}
+            {/* SECTION 5: PENGEMBALIAN UNIT (Return) */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                     <RotateCcw className="text-blue-600" size={16}/> 4. PENGEMBALIAN UNIT
                 </h3>
                 
-                {/* Row 1: Date/Time & Overdue */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">TGL & JAM KEMBALI (AKTUAL)</label>
@@ -599,7 +703,6 @@ export const BookingFormPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Row 2: Extra Fee */}
                 <div className="mb-4">
                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">NOMINAL BIAYA EXTRA</label>
                      <div className="relative">
@@ -613,7 +716,6 @@ export const BookingFormPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Row 3: Reason */}
                 <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">KETERANGAN BIAYA EXTRA</label>
                     <textarea 

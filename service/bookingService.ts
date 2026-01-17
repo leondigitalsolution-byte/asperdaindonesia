@@ -56,6 +56,34 @@ export const bookingService = {
   },
 
   /**
+   * Get lists of unavailable Car IDs and Driver IDs for a date range
+   */
+  getUnavailableResources: async (startDate: string, endDate: string, excludeBookingId?: string) => {
+    const profile = await authService.getUserProfile();
+    if (!profile?.company_id) return { carIds: [], driverIds: [] };
+
+    let query = supabase
+      .from('bookings')
+      .select('car_id, driver_id')
+      .eq('company_id', profile.company_id)
+      .neq('status', BookingStatus.CANCELLED)
+      .lt('start_date', endDate) // Overlap logic
+      .gt('end_date', startDate);
+
+    if (excludeBookingId) {
+      query = query.neq('id', excludeBookingId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+
+    const carIds = data.map(b => b.car_id).filter(id => id);
+    const driverIds = data.map(b => b.driver_id).filter(id => id);
+
+    return { carIds, driverIds };
+  },
+
+  /**
    * Create a new booking
    * Updated Type Definition to explicitly include driver_id
    */

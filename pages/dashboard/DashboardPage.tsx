@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { dashboardService, DashboardStats } from '../../service/dashboardService';
 import { authService } from '../../service/authService';
@@ -12,8 +13,8 @@ const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Calendar State
-  const [currentDate, setCurrentDate] = useState(new Date());
+  // Calendar State (Start Date for the week view)
+  const [weekStartDate, setWeekStartDate] = useState(new Date());
 
   useEffect(() => {
     const loadData = async () => {
@@ -34,30 +35,52 @@ const DashboardPage: React.FC = () => {
     loadData();
   }, []);
 
-  // --- CALENDAR LOGIC ---
-  const getDaysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  // --- CALENDAR LOGIC (WEEK VIEW) ---
+  
+  // Generate 7 days starting from weekStartDate
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStartDate);
+      d.setDate(d.getDate() + i);
+      return d;
+  });
+
+  const getMonthLabel = () => {
+      const start = weekDates[0];
+      const end = weekDates[6];
+      if (start.getMonth() === end.getMonth()) {
+          return start.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+      }
+      return `${start.toLocaleString('id-ID', { month: 'short' })} - ${end.toLocaleString('id-ID', { month: 'short', year: 'numeric' })}`;
   };
 
-  const days = Array.from({ length: getDaysInMonth(currentDate) }, (_, i) => i + 1);
-  const monthName = currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
-
-  // Only simplified filtering for visual representation on dashboard
-  // We filter the already fetched bookings against the specific day
-  const isDateBooked = (carId: string, day: number) => {
+  const isDateBooked = (carId: string, date: Date) => {
     if (!stats?.monthBookings) return null;
 
-    const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    checkDate.setHours(12, 0, 0, 0);
+    const checkDate = new Date(date);
+    checkDate.setHours(12, 0, 0, 0); // Normalized time
 
+    // STRICT FILTER: Only show ACTIVE or CONFIRMED (Booked)
     return stats.monthBookings.find(b => {
       if (b.car_id !== carId) return false;
+      
+      // Filter out Pending, Cancelled, Completed for this view
+      if (b.status !== BookingStatus.ACTIVE && b.status !== BookingStatus.CONFIRMED) {
+          return false;
+      }
+
       const start = new Date(b.start_date);
       const end = new Date(b.end_date);
       start.setHours(0,0,0,0);
       end.setHours(23,59,59,999);
+      
       return checkDate >= start && checkDate <= end;
     });
+  };
+
+  const changeWeek = (offset: number) => {
+      const newDate = new Date(weekStartDate);
+      newDate.setDate(newDate.getDate() + (offset * 7));
+      setWeekStartDate(newDate);
   };
 
   if (loading) {
@@ -144,19 +167,19 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* GANTT CHART WIDGET */}
+      {/* GANTT CHART WIDGET - WEEKLY VIEW */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
           <div>
              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-               <Calendar size={18} className="text-indigo-600"/> Jadwal Unit (Gantt Chart)
+               <Calendar size={18} className="text-indigo-600"/> Jadwal Unit (7 Hari)
              </h3>
-             <p className="text-xs text-slate-500">Monitoring ketersediaan unit bulan ini.</p>
+             <p className="text-xs text-slate-500">Monitoring Booking Confirmed & Active.</p>
           </div>
           <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
-             <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="p-1 hover:bg-slate-100 rounded text-slate-600"><ChevronLeft size={16}/></button>
-             <span className="text-sm font-bold text-slate-800 min-w-[120px] text-center">{monthName}</span>
-             <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="p-1 hover:bg-slate-100 rounded text-slate-600"><ChevronRight size={16}/></button>
+             <button onClick={() => changeWeek(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-600"><ChevronLeft size={16}/></button>
+             <span className="text-sm font-bold text-slate-800 min-w-[140px] text-center uppercase tracking-wide text-xs">{getMonthLabel()}</span>
+             <button onClick={() => changeWeek(1)} className="p-1 hover:bg-slate-100 rounded text-slate-600"><ChevronRight size={16}/></button>
           </div>
         </div>
         
@@ -169,13 +192,16 @@ const DashboardPage: React.FC = () => {
                     <thead>
                        <tr>
                           <th className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-200 px-4 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wide min-w-[180px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Unit Mobil</th>
-                          {days.map(day => {
-                             const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear();
-                             const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-                             const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                          {weekDates.map(date => {
+                             const isToday = date.toDateString() === new Date().toDateString();
+                             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                             const dayName = date.toLocaleDateString('id-ID', { weekday: 'short' });
+                             const dayNum = date.getDate();
+
                              return (
-                                <th key={day} className={`border-b border-r border-slate-100 px-1 py-2 text-center text-[10px] font-bold min-w-[30px] ${isToday ? 'bg-blue-100 text-blue-800' : isWeekend ? 'text-red-400 bg-slate-50' : 'text-slate-500'}`}>
-                                   {day}
+                                <th key={date.toISOString()} className={`border-b border-r border-slate-100 px-1 py-3 text-center text-xs font-bold min-w-[60px] ${isToday ? 'bg-blue-100 text-blue-800' : isWeekend ? 'text-red-400 bg-slate-50' : 'text-slate-500'}`}>
+                                   <div className="uppercase text-[10px] opacity-70">{dayName}</div>
+                                   <div className="text-sm">{dayNum}</div>
                                 </th>
                              )
                           })}
@@ -188,24 +214,26 @@ const DashboardPage: React.FC = () => {
                                 <div className="truncate max-w-[160px]">{car.brand} {car.model}</div>
                                 <div className="text-[10px] text-slate-400 font-mono mt-0.5">{car.license_plate}</div>
                              </td>
-                             {days.map(day => {
-                                const booking = isDateBooked(car.id, day);
+                             {weekDates.map(date => {
+                                const booking = isDateBooked(car.id, date);
                                 let barClass = "";
                                 
                                 if (booking) {
                                    if (booking.status === BookingStatus.ACTIVE) barClass = "bg-green-500";
                                    else if (booking.status === BookingStatus.CONFIRMED) barClass = "bg-blue-500";
-                                   else if (booking.status === BookingStatus.PENDING) barClass = "bg-amber-400";
-                                   else if (booking.status === BookingStatus.COMPLETED) barClass = "bg-slate-400";
                                 }
 
                                 return (
-                                   <td key={day} className="border-b border-r border-slate-100 px-0.5 py-1 h-10 relative group">
+                                   <td key={date.toISOString()} className="border-b border-r border-slate-100 px-0.5 py-1 h-12 relative group">
                                       {booking && (
                                          <div 
-                                            className={`w-full h-6 rounded-sm ${barClass} cursor-help transition-opacity hover:opacity-80`}
+                                            className={`w-full h-8 rounded-md ${barClass} cursor-help transition-opacity hover:opacity-90 shadow-sm`}
                                             title={`${booking.customers?.full_name} (${booking.status})`}
-                                         ></div>
+                                         >
+                                            <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-800 text-white text-xs p-2 rounded whitespace-nowrap z-50">
+                                                {booking.customers?.full_name} - {booking.status}
+                                            </div>
+                                         </div>
                                       )}
                                    </td>
                                 )
@@ -218,10 +246,12 @@ const DashboardPage: React.FC = () => {
            )}
         </div>
         <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex gap-4 text-[10px] font-bold text-slate-500 uppercase">
-           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-green-500 rounded-sm"></div> Sedang Jalan</div>
-           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-sm"></div> Confirmed</div>
-           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-amber-400 rounded-sm"></div> Pending</div>
-           <div className="flex-1 text-right normal-case">
+           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> Active (Jalan)</div>
+           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded-sm"></div> Booked (Confirmed)</div>
+           <div className="flex-1 text-right normal-case text-slate-400">
+              *Hanya menampilkan status Booked & Active
+           </div>
+           <div className="normal-case">
               <Link to="/dashboard/calendar" className="text-indigo-600 hover:underline">Lihat Kalender Lengkap &rarr;</Link>
            </div>
         </div>
