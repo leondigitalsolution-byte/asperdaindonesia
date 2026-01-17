@@ -239,8 +239,10 @@ export interface Car {
   current_odometer?: number;
   maintenance?: MaintenanceRecord[];
   gps_device_id?: string;
+  is_marketplace_ready?: boolean; // NEW FIELD
   created_at?: string;
   partners?: Partner;
+  companies?: Company; // For Marketplace Join
   pricing?: {[key: string]: number}; 
 }
 
@@ -273,7 +275,7 @@ export interface Booking {
   company_id: string;
   car_id: string;
   customer_id: string;
-  driver_id?: string; // Add driver_id explicitly
+  driver_id?: string;
   start_date: string;
   end_date: string;
   total_price: number;
@@ -324,6 +326,7 @@ export interface RegistrationFormData {
   dpcId: string;
 }
 
+// Deprecated in V2 but kept for type compatibility if needed temporarily
 export interface MarketplacePost {
   id: string;
   company_id: string;

@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import { Customer } from '../types';
 import { authService } from './authService';
@@ -22,6 +23,20 @@ export const customerService = {
   },
 
   /**
+   * Get single customer by ID
+   */
+  getCustomerById: async (id: string): Promise<Customer> => {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data as Customer;
+  },
+
+  /**
    * Create a new customer
    * FIX: Memastikan company_id diambil dari session user sebelum insert.
    */
@@ -36,8 +51,6 @@ export const customerService = {
     if (!profile.company_id) {
       throw new Error("Akun Anda tidak terhubung dengan perusahaan rental manapun (Company ID Missing).");
     }
-
-    console.log("Creating customer for Company ID:", profile.company_id);
 
     // 2. Siapkan Payload dengan Explicit Company ID
     const newCustomerPayload = {
@@ -61,6 +74,27 @@ export const customerService = {
       throw new Error(`Gagal menyimpan data pelanggan: ${error.message}`);
     }
     
+    return data;
+  },
+
+  /**
+   * Update existing customer
+   */
+  updateCustomer: async (id: string, updates: Partial<Customer>) => {
+    // Clean up restricted fields
+    const payload = { ...updates };
+    delete payload.id;
+    delete payload.company_id;
+    delete payload.created_at;
+
+    const { data, error } = await supabase
+      .from('customers')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
     return data;
   },
 

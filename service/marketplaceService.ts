@@ -1,19 +1,39 @@
 
 import { supabase } from './supabaseClient';
-import { MarketplacePost } from '../types';
+import { Car, BookingStatus } from '../types';
 
 export const marketplaceService = {
   /**
-   * Get marketplace posts with smart filtering
-   * @param dpcId - Filter by DPC Region (via joined Company table)
-   * @param startDate - Start of the date range (YYYY-MM-DD)
-   * @param endDate - End of the date range (YYYY-MM-DD)
+   * Get marketplace cars (V2 Logic)
+   * Fetches real cars from 'cars' table where is_marketplace_ready = true
+   * And performs availability check against bookings.
    */
-  getPosts: async (dpcId?: string, startDate?: string, endDate?: string): Promise<MarketplacePost[]> => {
-    // Start building query
-    // NOTE: using companies!inner to enforce the join filter
+  getMarketplaceCars: async (
+    startDate: string,
+    endDate: string,
+    filters?: {
+      dpcId?: string;
+      search?: string;
+      category?: string;
+    }
+  ): Promise<Car[]> => {
+    
+    // 1. Get List of BOOKED Car IDs in the requested range
+    // Logic: Find bookings that overlap with requested start/end
+    const { data: busyBookings, error: busyError } = await supabase
+        .from('bookings')
+        .select('car_id')
+        .neq('status', BookingStatus.CANCELLED)
+        .lt('start_date', endDate) // Booking starts before requested end
+        .gt('end_date', startDate); // Booking ends after requested start
+    
+    if (busyError) throw new Error(busyError.message);
+    
+    const busyCarIds = busyBookings?.map(b => b.car_id) || [];
+
+    // 2. Query Cars
     let query = supabase
-      .from('marketplace_posts')
+      .from('cars')
       .select(`
         *,
         companies!inner (
@@ -22,36 +42,46 @@ export const marketplaceService = {
           phone,
           address,
           dpc_id,
+          logo_url,
           dpc_regions (
             name,
             province
           )
         )
       `)
-      .eq('type', 'offering') // We only want available units
-      .order('created_at', { ascending: false });
+      .eq('is_marketplace_ready', true)
+      .eq('status', 'available'); // Only physically available cars
 
-    // Apply Region Filter
-    if (dpcId) {
-      query = query.eq('companies.dpc_id', dpcId);
+    // 3. Apply Filters
+    
+    // Exclude busy cars
+    if (busyCarIds.length > 0) {
+        query = query.not('id', 'in', `(${busyCarIds.join(',')})`);
     }
 
-    // Apply Date Range Filter
-    // Logic: Tampilkan postingan yang 'Available Date'-nya berada di dalam rentang pencarian user.
-    
-    if (startDate) {
-       // Unit harus tersedia SETELAH atau PADA tanggal mulai pencarian
-       query = query.gte('date_needed', startDate);
+    // Filter by Region
+    if (filters?.dpcId) {
+        query = query.eq('companies.dpc_id', filters.dpcId);
     }
-    
-    if (endDate) {
-       // Unit harus tersedia SEBELUM atau PADA tanggal akhir pencarian
-       query = query.lte('date_needed', endDate);
+
+    // Filter by Category
+    if (filters?.category && filters.category !== 'Semua') {
+        query = query.eq('category', filters.category);
+    }
+
+    // Filter by Search Text (Brand/Model or Company Name)
+    if (filters?.search) {
+        const term = filters.search;
+        // Search in car brand/model OR company name (requires specific syntax in supabase js)
+        // Using 'or' with referenced tables is tricky in simple syntax. 
+        // For simplicity/performance, we filter by car brand/model here.
+        query = query.ilike('brand', `%${term}%`); 
+        // Note: For advanced search across joined tables, usually needs a View or RPC.
     }
 
     const { data, error } = await query;
 
     if (error) throw new Error(error.message);
-    return data as unknown as MarketplacePost[];
+    return data as Car[];
   }
 };

@@ -1,38 +1,28 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, AppSettings, FuelType, TollRate, UserRole, Partner, Driver, CoverageArea, CoopMember } from '../../types';
-import { getStoredData, setStoredData, DEFAULT_SETTINGS, generateDummyData, clearAllData } from '../../service/dataService';
+import { getStoredData, setStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { authService } from '../../service/authService';
 import { coopService } from '../../service/coopService';
-import { Save, RefreshCw, Trash2, Moon, Sun, Monitor, AlertTriangle, Database, Fuel, MapPin, DollarSign, Users, Plus, X, Lock, Edit2, Link as LinkIcon, Tag, Package, LayoutTemplate, Phone, Mail, Shield, User as UserIcon, Droplet, Map as MapIcon, Building, CheckCircle, CreditCard, Clock, Image as ImageIcon, Zap } from 'lucide-react';
+import { Save, RefreshCw, Trash2, Moon, Sun, Monitor, Fuel, MapPin, DollarSign, Users, Plus, X, Edit2, Tag, Package, Building, CheckCircle, CreditCard, Image as ImageIcon } from 'lucide-react';
 import { ImageUploader } from '../../components/ImageUploader';
 
 export const SettingsPage: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
     const [isSaving, setIsSaving] = useState(false);
-    const [isProcessingSystem, setIsProcessingSystem] = useState(false);
     
     // Tab State
     const [activeTab, setActiveTab] = useState<'general' | 'auth_layout' | 'business' | 'coverage' | 'system' | 'users' | 'coop'>('general');
 
     // User Management State
     const [usersList, setUsersList] = useState<User[]>([]);
-    const [partners, setPartners] = useState<Partner[]>([]);
-    const [drivers, setDrivers] = useState<Driver[]>([]);
-    
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState<User | null>(null);
-    
     // User Form
     const [uName, setUName] = useState('');
-    const [uUsername, setUUsername] = useState('');
-    const [uPassword, setUPassword] = useState('');
     const [uRole, setURole] = useState<UserRole>(UserRole.ADMIN);
     const [uPhone, setUPhone] = useState('');
     const [uEmail, setUEmail] = useState('');
-    const [uImage, setUImage] = useState<string | null>(null);
-    const [uLinkedId, setULinkedId] = useState(''); // Stores linkedPartnerId or linkedDriverId
 
     // New Input States for Business Tab
     const [newCategory, setNewCategory] = useState('');
@@ -61,7 +51,6 @@ export const SettingsPage: React.FC = () => {
     const [regFullName, setRegFullName] = useState('');
     const [regAddress, setRegAddress] = useState('');
     const [regCity, setRegCity] = useState('');
-    const [regPhone, setRegPhone] = useState('');
     const [regPhoto, setRegPhoto] = useState<string | null>(null);
     const [regFile, setRegFile] = useState<File | null>(null);
     // Approval
@@ -70,7 +59,6 @@ export const SettingsPage: React.FC = () => {
 
     const isOwner = currentUser?.role === UserRole.OWNER || currentUser?.role === UserRole.SUPER_ADMIN || currentUser?.role === UserRole.DPC_ADMIN;
     const isSuperAdmin = currentUser?.role === UserRole.SUPER_ADMIN;
-    const isOrgAdmin = currentUser?.role === UserRole.SUPER_ADMIN || currentUser?.role === UserRole.DPC_ADMIN;
     const isDpcAdmin = currentUser?.role === UserRole.DPC_ADMIN;
 
     useEffect(() => {
@@ -90,8 +78,6 @@ export const SettingsPage: React.FC = () => {
     useEffect(() => {
         if (isOwner) {
             authService.getUsers().then(data => setUsersList(data));
-            setPartners(getStoredData<Partner[]>('partners', []));
-            setDrivers(getStoredData<Driver[]>('drivers', []));
         }
     }, [isOwner, activeTab]);
 
@@ -136,7 +122,8 @@ export const SettingsPage: React.FC = () => {
                 dpc_id: dpcId,
                 gender: 'Laki-laki', // Default, should extend form
                 join_date: new Date().toISOString().split('T')[0],
-                department: 'ANGGOTA'
+                department: 'ANGGOTA',
+                photo_url: regPhoto || undefined
             }, regFile);
             
             alert("Pendaftaran berhasil! Menunggu verifikasi pengurus.");
@@ -178,44 +165,32 @@ export const SettingsPage: React.FC = () => {
         }, 1000);
     };
 
-    // --- DATA HANDLERS ---
-    const handleDummyData = async () => { /* ... */ };
-    const handleClearData = async () => { /* ... */ };
-
     // --- USER MANAGEMENT HANDLERS ---
     const openUserModal = (user?: User) => {
         if (user) {
-            setEditingUser(user);
             setUName(user.name);
-            setUUsername(user.username);
-            setUPassword(user.password || '');
             setURole(user.role);
             setUPhone(user.phone || '');
             setUEmail(user.email || '');
-            setUImage(user.image || null);
-            setULinkedId(user.linkedPartnerId || user.linkedDriverId || '');
         } else {
-            setEditingUser(null);
             setUName('');
-            setUUsername('');
-            setUPassword('');
             setURole(UserRole.ADMIN);
             setUPhone('');
             setUEmail('');
-            setUImage(null);
-            setULinkedId('');
         }
         setIsUserModalOpen(true);
     };
 
-    const handleSaveUser = async (e: React.FormEvent) => {
-        e.preventDefault();
-        // ... (Existing logic)
-        // Mock save logic for now as authService.saveUser is limited
-        setIsUserModalOpen(false);
+    const handleDeleteUser = async (id: string) => { 
+        if(window.confirm('Hapus user ini?')) {
+            try {
+                await authService.deleteUser(id);
+                setUsersList(prev => prev.filter(u => u.id !== id));
+            } catch(e: any) {
+                alert("Gagal hapus: " + e.message);
+            }
+        }
     };
-
-    const handleDeleteUser = async (id: string) => { /* ... */ };
 
     // Helper for List Items
     const addListItem = (field: keyof AppSettings, value: string, resetFn: (s: string) => void) => {
@@ -267,8 +242,30 @@ export const SettingsPage: React.FC = () => {
         handleChange('tollRates', updated);
     };
 
-    const addCoverageArea = () => { /* ... */ };
-    const removeCoverageArea = (index: number) => { /* ... */ };
+    const addCoverageArea = () => {
+        if (!newAreaName) return;
+        const newArea: CoverageArea = {
+            id: Date.now().toString(),
+            name: newAreaName,
+            description: newAreaDesc,
+            extraPrice: newAreaRentPrice,
+            extraDriverPrice: newAreaDriverPrice
+        };
+        const updated = [...(settings.coverageAreas || []), newArea];
+        handleChange('coverageAreas', updated);
+        
+        // Reset
+        setNewAreaName('');
+        setNewAreaDesc('');
+        setNewAreaRentPrice(0);
+        setNewAreaDriverPrice(0);
+    };
+
+    const removeCoverageArea = (index: number) => {
+        const updated = [...(settings.coverageAreas || [])];
+        updated.splice(index, 1);
+        handleChange('coverageAreas', updated);
+    };
 
     // Helper to get Role Badge
     const getRoleBadge = (role: UserRole) => {
@@ -316,15 +313,10 @@ export const SettingsPage: React.FC = () => {
                     <>
                         <button onClick={() => setActiveTab('auth_layout')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'auth_layout' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Tampilan Auth</button>
                         <button onClick={() => setActiveTab('business')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'business' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Bisnis & Harga</button>
+                        <button onClick={() => setActiveTab('coverage')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'coverage' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Coverage Area</button>
                         <button onClick={() => setActiveTab('coop')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'coop' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Koperasi</button>
-                        
-                        {isOrgAdmin && (
-                            <button onClick={() => setActiveTab('coverage')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'coverage' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Coverage Area</button>
-                        )}
-
                         <button onClick={() => setActiveTab('users')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Manajemen User</button>
                         
-                        {/* ONLY SUPER ADMIN SEES SYSTEM TAB */}
                         {isSuperAdmin && (
                             <button onClick={() => setActiveTab('system')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'system' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500'}`}>Sistem & Data</button>
                         )}
@@ -459,20 +451,108 @@ export const SettingsPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Other tabs... */}
+            {/* COVERAGE AREA TAB */}
+            {activeTab === 'coverage' && isOwner && (
+                <div className="space-y-6 animate-in fade-in">
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <div className="flex justify-between items-center border-b pb-4 mb-4">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><MapPin size={20}/> Coverage Area & Surcharge</h3>
+                                <p className="text-sm text-slate-500 mt-1">Atur biaya tambahan untuk perjalanan ke luar kota / wilayah tertentu.</p>
+                            </div>
+                        </div>
+
+                        {/* Form */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+                            <h4 className="font-bold text-sm text-slate-700 mb-3 uppercase">Tambah Wilayah Baru</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <input 
+                                    className="border rounded-lg p-2.5 text-sm" 
+                                    placeholder="Nama Wilayah (misal: Jawa Tengah)" 
+                                    value={newAreaName}
+                                    onChange={e => setNewAreaName(e.target.value)}
+                                />
+                                <input 
+                                    className="border rounded-lg p-2.5 text-sm" 
+                                    placeholder="Keterangan / Kota Cakupan" 
+                                    value={newAreaDesc}
+                                    onChange={e => setNewAreaDesc(e.target.value)}
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Surcharge Sewa Unit (Per Hari)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">Rp</span>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border rounded-lg pl-8 p-2.5 text-sm font-bold" 
+                                            placeholder="0" 
+                                            value={newAreaRentPrice}
+                                            onChange={e => setNewAreaRentPrice(Number(e.target.value))}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Surcharge Jasa Driver (Per Hari)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">Rp</span>
+                                        <input 
+                                            type="number" 
+                                            className="w-full border rounded-lg pl-8 p-2.5 text-sm font-bold" 
+                                            placeholder="0" 
+                                            value={newAreaDriverPrice}
+                                            onChange={e => setNewAreaDriverPrice(Number(e.target.value))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={addCoverageArea} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700">
+                                <Plus size={16}/> Tambah Area
+                            </button>
+                        </div>
+
+                        {/* List */}
+                        <div className="space-y-3">
+                            {settings.coverageAreas?.length === 0 && <p className="text-center text-slate-500 py-4 italic">Belum ada data wilayah.</p>}
+                            {settings.coverageAreas?.map((area, idx) => (
+                                <div key={area.id || idx} className="border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row justify-between items-start md:items-center hover:bg-slate-50 transition-colors">
+                                    <div className="mb-2 md:mb-0">
+                                        <h5 className="font-bold text-slate-800 text-base">{area.name}</h5>
+                                        <p className="text-sm text-slate-500">{area.description}</p>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-right">
+                                            <div className="text-xs text-slate-400 uppercase font-bold">Unit</div>
+                                            <div className="font-mono text-sm font-bold text-slate-700">+Rp {area.extraPrice.toLocaleString('id-ID')}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-xs text-slate-400 uppercase font-bold">Driver</div>
+                                            <div className="font-mono text-sm font-bold text-slate-700">+Rp {area.extraDriverPrice.toLocaleString('id-ID')}</div>
+                                        </div>
+                                        <button onClick={() => removeCoverageArea(idx)} className="text-red-500 hover:bg-red-50 p-2 rounded-full ml-2">
+                                            <Trash2 size={18}/>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'coop' && isOwner && (
                 <div className="space-y-6 animate-in fade-in">
-                    {/* ... (Existing Coop Content, truncated for brevity, same as original file) ... */}
-                    {/* ... Including Membership Card and Registration Form ... */}
+                    {/* ... Membership Card ... */}
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                         <h3 className="font-bold text-lg text-slate-800 border-b pb-4 mb-4 flex items-center gap-2">
                             <Building size={20} className="text-indigo-600"/> Status Keanggotaan Saya
                         </h3>
-                        {/* ... Rest of Coop content logic ... */}
+                        {/* Logic */}
                         {loadingCoop ? (
                             <div className="p-8 text-center text-slate-500"><i className="fas fa-spinner fa-spin"></i> Memuat data...</div>
                         ) : myMembership ? (
-                            /* ... Membership Card ... */
+                            /* Membership Card */
                             <div className="flex flex-col md:flex-row gap-6 items-start">
                                 <div className="w-full md:w-80 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 text-white shadow-2xl relative overflow-hidden flex-shrink-0">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10"></div>
@@ -489,7 +569,7 @@ export const SettingsPage: React.FC = () => {
                                             {myMembership.photo_url ? (
                                                 <img src={myMembership.photo_url} className="w-full h-full object-cover" />
                                             ) : (
-                                                <UserIcon className="w-full h-full p-2 text-slate-500" />
+                                                <div className="w-full h-full flex items-center justify-center text-slate-500"><i className="fas fa-user"></i></div>
                                             )}
                                         </div>
                                         <div>
@@ -520,11 +600,11 @@ export const SettingsPage: React.FC = () => {
                                 </div>
                             </div>
                         ) : (
-                            /* ... Registration Form ... */
+                            /* Registration Form */
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-4">
                                     <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center">
-                                        <Shield size={48} className="text-indigo-400 mx-auto mb-4"/>
+                                        <div className="text-indigo-400 mx-auto mb-4 text-4xl"><i className="fas fa-shield-alt"></i></div>
                                         <h4 className="font-bold text-lg text-indigo-900 mb-2">Belum Terdaftar</h4>
                                         <p className="text-sm text-indigo-700 mb-6">Bergabunglah dengan Koperasi ASPERDA untuk mendapatkan manfaat lebih.</p>
                                     </div>
@@ -546,7 +626,7 @@ export const SettingsPage: React.FC = () => {
                             </div>
                         )}
                     </div>
-                    {/* ... DPC Admin logic ... */}
+                    {/* DPC Admin Logic */}
                     {isDpcAdmin && (
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-800 border-b pb-4 mb-4 flex items-center gap-2"><CheckCircle size={20} className="text-green-600"/> Konfirmasi Anggota Baru (DPC)</h3>
@@ -698,92 +778,66 @@ export const SettingsPage: React.FC = () => {
                             <tbody className="divide-y divide-slate-100">
                                 {usersList.map(u => (
                                     <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0 border border-slate-300">
-                                                    {u.image ? (
-                                                        <img src={u.image} alt={u.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                                            <UserIcon size={20} />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-slate-900">{u.name}</div>
-                                                    <div className="text-xs text-slate-500 font-mono">{u.username}</div>
-                                                </div>
-                                            </div>
+                                        <td className="p-4 border-b">
+                                            <div className="font-bold text-slate-800">{u.name}</div>
+                                            <div className="text-xs text-slate-500">{u.username}</div>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex flex-col items-start gap-1">
-                                                {getRoleBadge(u.role)}
-                                            </div>
+                                        <td className="p-4 border-b">
+                                            {getRoleBadge(u.role)}
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex flex-col gap-1 text-sm text-slate-600">
-                                                {u.phone || u.email || '-'}
-                                            </div>
+                                        <td className="p-4 border-b">
+                                            <div className="text-sm text-slate-600">{u.phone || '-'}</div>
+                                            <div className="text-xs text-slate-400">{u.email || '-'}</div>
                                         </td>
-                                        <td className="p-4 text-right">
-                                            <button onClick={() => openUserModal(u)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit2 size={16}/></button>
+                                        <td className="p-4 border-b text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => openUserModal(u)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Edit2 size={16}/></button>
+                                                <button onClick={() => handleDeleteUser(u.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
+                                {usersList.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="p-8 text-center text-slate-500 italic">Belum ada user tambahan.</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             )}
 
-            {/* SYSTEM TAB - ONLY FOR SUPER ADMIN */}
+            {/* SYSTEM TAB (Super Admin) */}
             {activeTab === 'system' && isSuperAdmin && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-                        <h3 className="font-bold text-lg text-slate-800 border-b pb-2 flex items-center gap-2"><Database size={20}/> Manajemen Data</h3>
-                        <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
-                            <h4 className="font-bold text-orange-800 mb-2 flex items-center gap-2"><AlertTriangle size={18}/> Data Dummy</h4>
-                            <button onClick={handleDummyData} disabled={isProcessingSystem} className="w-full bg-orange-600 text-white py-2 rounded-lg font-bold hover:bg-orange-700 disabled:opacity-50">Generate Dummy Data</button>
-                        </div>
-                        <div className="p-4 bg-red-50 rounded-xl border border-red-100">
-                            <h4 className="font-bold text-red-800 mb-2 flex items-center gap-2"><Trash2 size={18}/> Reset Sistem</h4>
-                            <button onClick={handleClearData} disabled={isProcessingSystem} className="w-full bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">Hapus Semua Data</button>
-                        </div>
-                    </div>
-                </div>
+               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                   <h3 className="font-bold text-lg text-slate-800 mb-4">System Utilities</h3>
+                   <div className="space-y-4">
+                       <button className="w-full bg-red-100 text-red-700 py-3 rounded-lg font-bold border border-red-200 hover:bg-red-200" onClick={() => { if(confirm("RESET SEMUA DATA?")) localStorage.clear(); window.location.reload(); }}>
+                           <Trash2 size={18} className="inline mr-2"/> RESET FACTORY DATA (Clear Cache)
+                       </button>
+                   </div>
+               </div>
             )}
 
-            {/* USER MODAL */}
+            {/* User Modal */}
             {isUserModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl max-h-[95vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6 border-b pb-2">
-                            <h3 className="text-xl font-bold text-slate-800">{editingUser ? 'Edit User' : 'Tambah User Baru'}</h3>
-                            <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
-                        </div>
-                        <form onSubmit={handleSaveUser} className="space-y-5">
-                            <div className="flex justify-center mb-2">
-                                <ImageUploader image={uImage} onImageChange={setUImage} aspectRatio="square" className="w-32 mx-auto" />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">NAMA LENGKAP</label><input required className="w-full border border-slate-300 rounded-lg p-2.5" value={uName} onChange={e => setUName(e.target.value)} /></div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">ROLE</label>
-                                    <select className="w-full border border-slate-300 rounded-lg p-2.5" value={uRole} onChange={e => { setURole(e.target.value as UserRole); setULinkedId(''); }}>
-                                        <option value="admin">Admin / Staff</option>
-                                        <option value="owner">Owner</option>
-                                        <option value="driver">Driver App</option>
-                                        <option value="partner">Partner App</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">USERNAME</label><input required className="w-full border border-slate-300 rounded-lg p-2.5" value={uUsername} onChange={e => setUUsername(e.target.value)} /></div>
-                                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">PASSWORD</label><input className="w-full border border-slate-300 rounded-lg p-2.5" value={uPassword} onChange={e => setUPassword(e.target.value)} placeholder={editingUser ? "(Tidak Diubah)" : "..."} /></div>
-                            </div>
-                            <div className="flex gap-3 pt-6 border-t border-slate-100">
-                                <button type="button" onClick={() => setIsUserModalOpen(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-bold">Batal</button>
-                                <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-bold">Simpan User</button>
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                        <h3 className="font-bold text-lg mb-4">Form User</h3>
+                        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); alert("Fitur simpan user via Settings dibatasi."); setIsUserModalOpen(false); }}>
+                            <input className="w-full border rounded p-2" placeholder="Nama Lengkap" value={uName} onChange={e => setUName(e.target.value)} />
+                            <select className="w-full border rounded p-2" value={uRole} onChange={e => setURole(e.target.value as UserRole)}>
+                                <option value={UserRole.ADMIN}>Admin Staff</option>
+                                <option value={UserRole.DRIVER}>Driver App</option>
+                                <option value={UserRole.PARTNER}>Mitra Owner</option>
+                            </select>
+                            <input className="w-full border rounded p-2" placeholder="Email (Username)" value={uEmail} onChange={e => setUEmail(e.target.value)} />
+                            <input className="w-full border rounded p-2" placeholder="No. HP" value={uPhone} onChange={e => setUPhone(e.target.value)} />
+                            
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => setIsUserModalOpen(false)} className="px-4 py-2 text-slate-600 font-bold">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded font-bold">Simpan</button>
                             </div>
                         </form>
                     </div>

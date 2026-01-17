@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import { Car, CarStatus, Transmission } from '../types';
 import { authService } from './authService';
@@ -27,7 +28,7 @@ export const carService = {
    * Create a new car record
    */
   createCar: async (
-    carData: Omit<Car, 'id' | 'company_id' | 'created_at' | 'image_url' | 'partners'>,
+    carData: Omit<Car, 'id' | 'company_id' | 'created_at' | 'image_url' | 'partners' | 'companies'>,
     imageFile?: File
   ) => {
     // 1. Get current user profile to find company_id
@@ -65,7 +66,9 @@ export const carService = {
         fuel_ratio: carData.fuel_ratio,
         current_odometer: carData.current_odometer,
         maintenance: carData.maintenance,
-        gps_device_id: carData.gps_device_id
+        gps_device_id: carData.gps_device_id,
+        driver_daily_salary: carData.driver_daily_salary,
+        is_marketplace_ready: carData.is_marketplace_ready // New flag
       })
       .select()
       .single();
@@ -106,6 +109,7 @@ export const carService = {
 
     // Remove joined tables or read-only fields if they exist in carData
     delete updates.partners;
+    delete updates.companies;
     delete updates.company_id;
     delete updates.created_at;
     delete updates.id;

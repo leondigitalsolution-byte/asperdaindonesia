@@ -1,8 +1,11 @@
+
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link } from 'react-router-dom';
 import { customerService } from '../../service/customerService';
 import { Customer } from '../../types';
 import { Button } from '../../components/ui/Button';
+import { Edit2, Trash2, Search, Plus, Phone } from 'lucide-react';
 
 export const CustomerListPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -62,8 +65,8 @@ export const CustomerListPage: React.FC = () => {
           <p className="text-slate-500 text-sm">Kelola database penyewa kendaraan Anda.</p>
         </div>
         <Link to="/dashboard/customers/new">
-          <Button>
-            <i className="fas fa-plus mr-2"></i> Tambah Pelanggan
+          <Button className="flex items-center gap-2">
+            <Plus size={18}/> Tambah Pelanggan
           </Button>
         </Link>
       </div>
@@ -80,7 +83,7 @@ export const CustomerListPage: React.FC = () => {
         <div className="p-4 border-b border-slate-100 bg-slate-50/50">
           <div className="max-w-md relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <i className="fas fa-search"></i>
+              <Search size={16}/>
             </div>
             <input
               type="text"
@@ -128,8 +131,8 @@ export const CustomerListPage: React.FC = () => {
                       {customer.nik}
                     </td>
                     <td className="px-6 py-4 text-slate-600">
-                      <a href={`https://wa.me/${customer.phone.replace(/^0/, '62')}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                        <i className="fab fa-whatsapp mr-1"></i>
+                      <a href={`https://wa.me/${customer.phone.replace(/^0/, '62')}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                        <Phone size={14}/>
                         {customer.phone}
                       </a>
                     </td>
@@ -138,23 +141,32 @@ export const CustomerListPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       {customer.is_blacklisted ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
                           BLACKLIST
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
                           Active
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => handleDelete(customer.id, customer.full_name)}
-                        className="text-slate-400 hover:text-red-600 transition-colors p-2"
-                        title="Hapus Pelanggan"
-                      >
-                        <i className="fas fa-trash-alt"></i>
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                          <Link 
+                            to={`/dashboard/customers/edit/${customer.id}`}
+                            className="text-slate-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-full"
+                            title="Edit Pelanggan"
+                          >
+                            <Edit2 size={16} />
+                          </Link>
+                          <button 
+                            onClick={() => handleDelete(customer.id, customer.full_name)}
+                            className="text-slate-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
+                            title="Hapus Pelanggan"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      </div>
                     </td>
                   </tr>
                 ))

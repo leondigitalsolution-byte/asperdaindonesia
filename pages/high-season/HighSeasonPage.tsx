@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { HighSeason, UserRole } from '../../types';
-import { getStoredData, setStoredData } from '../../service/dataService';
+import { highSeasonService } from '../../service/highSeasonService';
 import { authService } from '../../service/authService';
 import { Plus, Trash2, Calendar } from 'lucide-react';
 
@@ -8,6 +9,8 @@ export const HighSeasonPage: React.FC = () => {
   const [highSeasons, setHighSeasons] = useState<HighSeason[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   // Form
   const [name, setName] = useState('');
@@ -15,56 +18,73 @@ export const HighSeasonPage: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [priceIncrease, setPriceIncrease] = useState(100000);
 
-  const isOwner = role === UserRole.OWNER || role === UserRole.SUPER_ADMIN;
+  const isOwner = role === UserRole.OWNER || role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN;
 
   useEffect(() => {
-    // 1. Get Role
-    authService.getUserProfile().then(p => {
-        if(p) setRole(p.role);
-    });
-
-    // 2. Get Data
-    setHighSeasons(getStoredData<HighSeason[]>('highSeasons', []));
+    loadData();
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const loadData = async () => {
+    setLoading(true);
+    try {
+        // 1. Get Role
+        const p = await authService.getUserProfile();
+        if(p) setRole(p.role);
+
+        // 2. Get Data
+        const data = await highSeasonService.getHighSeasons();
+        setHighSeasons(data);
+    } catch (err) {
+        console.error(err);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
     
     if (new Date(endDate) < new Date(startDate)) {
         alert("Tanggal selesai harus setelah tanggal mulai");
+        setSaving(false);
         return;
     }
 
-    const newSeason: HighSeason = {
-        id: Date.now().toString(),
-        name,
-        startDate,
-        endDate,
-        priceIncrease: Number(priceIncrease)
-    };
-
-    const updated = [...highSeasons, newSeason];
-    setHighSeasons(updated);
-    setStoredData('highSeasons', updated);
-    setIsModalOpen(false);
-    
-    // Reset
-    setName(''); setStartDate(''); setEndDate(''); setPriceIncrease(100000);
+    try {
+        await highSeasonService.createHighSeason({
+            name,
+            startDate,
+            endDate,
+            priceIncrease: Number(priceIncrease)
+        });
+        
+        await loadData(); // Reload list
+        setIsModalOpen(false);
+        
+        // Reset
+        setName(''); setStartDate(''); setEndDate(''); setPriceIncrease(100000);
+    } catch (err: any) {
+        alert("Gagal menyimpan: " + err.message);
+    } finally {
+        setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
       if(window.confirm('Hapus event High Season ini?')) {
-          setHighSeasons(prev => {
-              const updated = prev.filter(h => h.id !== id);
-              setStoredData('highSeasons', updated);
-              return updated;
-          });
+          try {
+              await highSeasonService.deleteHighSeason(id);
+              loadData();
+          } catch(err: any) {
+              alert("Gagal menghapus: " + err.message);
+          }
       }
   };
 
   const formatDate = (dateString: string) => {
       const d = new Date(dateString);
-      return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+      return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
   };
 
   return (
@@ -72,7 +92,7 @@ export const HighSeasonPage: React.FC = () => {
       <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-4">
         <div>
           <h2 className="text-3xl font-bold text-slate-900">High Season</h2>
-          <p className="text-slate-500">Atur kenaikan harga otomatis pada tanggal tertentu.</p>
+          <p className="text-slate-500">Atur kenaikan harga otomatis pada tanggal tertentu (Lebaran, Natal, Tahun Baru).</p>
         </div>
         {isOwner && (
             <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm font-bold transition-colors">
@@ -82,44 +102,48 @@ export const HighSeasonPage: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50/50">
-                    <tr>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">NAMA EVENT</th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">PERIODE</th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">KENAIKAN HARGA (PER HARI)</th>
-                        <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">AKSI</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-slate-100">
-                    {highSeasons.map(hs => (
-                        <tr key={hs.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 font-bold text-slate-900 text-sm">{hs.name}</td>
-                            <td className="px-6 py-4 text-sm text-slate-600">
-                                <div className="flex items-center gap-2">
-                                    <Calendar size={14} className="text-slate-400"/>
-                                    {formatDate(hs.startDate)} - {formatDate(hs.endDate)}
-                                </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm font-bold text-orange-600">
-                                + Rp {hs.priceIncrease.toLocaleString('id-ID')}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                {isOwner && (
-                                    <button onClick={() => handleDelete(hs.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors" title="Hapus Event">
-                                        <Trash2 size={16} />
-                                    </button>
-                                )}
-                            </td>
+          {loading ? (
+              <div className="p-12 text-center text-slate-500"><i className="fas fa-spinner fa-spin mr-2"></i> Memuat data...</div>
+          ) : (
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50/50">
+                        <tr>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">NAMA EVENT</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">PERIODE</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">KENAIKAN HARGA (PER HARI)</th>
+                            <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">AKSI</th>
                         </tr>
-                    ))}
-                    {highSeasons.length === 0 && (
-                        <tr><td colSpan={4} className="text-center py-12 text-slate-500">Belum ada event High Season.</td></tr>
-                    )}
-                </tbody>
-            </table>
-          </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-slate-100">
+                        {highSeasons.map(hs => (
+                            <tr key={hs.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-6 py-4 font-bold text-slate-900 text-sm">{hs.name}</td>
+                                <td className="px-6 py-4 text-sm text-slate-600">
+                                    <div className="flex items-center gap-2">
+                                        <Calendar size={14} className="text-slate-400"/>
+                                        {formatDate(hs.startDate)} - {formatDate(hs.endDate)}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4 text-sm font-bold text-orange-600">
+                                    + Rp {hs.priceIncrease.toLocaleString('id-ID')}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                    {isOwner && (
+                                        <button onClick={() => handleDelete(hs.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors" title="Hapus Event">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {highSeasons.length === 0 && (
+                            <tr><td colSpan={4} className="text-center py-12 text-slate-500">Belum ada event High Season.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+          )}
       </div>
 
       {isModalOpen && (
@@ -184,7 +208,9 @@ export const HighSeasonPage: React.FC = () => {
 
                       <div className="flex gap-3 pt-4 border-t border-slate-100">
                           <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg font-bold hover:bg-slate-50 transition-colors text-sm">Batal</button>
-                          <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md transition-colors text-sm">Simpan Event</button>
+                          <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md transition-colors text-sm disabled:opacity-50">
+                              {saving ? 'Menyimpan...' : 'Simpan Event'}
+                          </button>
                       </div>
                   </form>
               </div>

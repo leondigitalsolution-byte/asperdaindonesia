@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import { carService } from '../../service/carService';
 import { partnerService } from '../../service/partnerService';
@@ -7,7 +8,7 @@ import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { CarStatus, Transmission, CarOwnerType, Partner, MaintenanceRecord, MaintenanceType, AppSettings } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { Wrench, Zap, Fuel, Gauge, MapPin, DollarSign, Info, Package, User } from 'lucide-react';
+import { Wrench, Zap, Fuel, Gauge, MapPin, DollarSign, Info, Package, User, Globe } from 'lucide-react';
 
 const MAINTENANCE_LABELS: Record<MaintenanceType, string> = {
     'service': 'Servis Rutin',
@@ -47,7 +48,8 @@ export const CarFormPage: React.FC = () => {
     category: '',
     gps_device_id: '',
     current_odometer: 0,
-    driver_daily_salary: 0, // NEW FIELD
+    driver_daily_salary: 0,
+    is_marketplace_ready: false // Default false
   });
 
   // Dynamic Pricing State
@@ -106,6 +108,7 @@ export const CarFormPage: React.FC = () => {
                     gps_device_id: car.gps_device_id || '',
                     current_odometer: car.current_odometer || 0,
                     driver_daily_salary: car.driver_daily_salary || 0,
+                    is_marketplace_ready: car.is_marketplace_ready || false
                 });
 
                 if(car.image_url) setPreviewUrl(car.image_url);
@@ -293,6 +296,36 @@ export const CarFormPage: React.FC = () => {
             
             {activeTab === 'info' && (
                 <div className="space-y-6 animate-fade-in">
+                    {/* MARKETPLACE TOGGLE - NEW */}
+                    <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-xl flex items-center gap-4">
+                        <div className="bg-white p-2 rounded-lg border border-indigo-100 shadow-sm">
+                            <Globe size={24} className="text-indigo-600" />
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-sm font-bold text-indigo-900 block cursor-pointer" htmlFor="marketplace_toggle">
+                                Tampilkan di Marketplace?
+                            </label>
+                            <p className="text-xs text-indigo-700 mt-0.5">
+                                Aktifkan agar mobil ini bisa dilihat dan disewa oleh member ASPERDA lain.
+                            </p>
+                        </div>
+                        <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input 
+                                type="checkbox" 
+                                name="is_marketplace_ready" 
+                                id="marketplace_toggle" 
+                                className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out checked:translate-x-full checked:border-indigo-600"
+                                checked={formData.is_marketplace_ready}
+                                onChange={e => setFormData(prev => ({...prev, is_marketplace_ready: e.target.checked}))}
+                                style={{
+                                    right: formData.is_marketplace_ready ? '0' : 'auto',
+                                    borderColor: formData.is_marketplace_ready ? '#4f46e5' : '#e5e7eb'
+                                }}
+                            />
+                            <label htmlFor="marketplace_toggle" className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer border ${formData.is_marketplace_ready ? 'bg-indigo-600 border-indigo-600' : 'bg-gray-300 border-gray-300'}`}></label>
+                        </div>
+                    </div>
+
                     {/* Image Upload */}
                     <div className="flex justify-center mb-6">
                         <div className="w-full">

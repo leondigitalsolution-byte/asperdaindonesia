@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { GlobalBlacklist } from '../types';
+import { GlobalBlacklist, BlacklistReport } from '../types';
 
 export const blacklistService = {
   /**
@@ -22,5 +22,61 @@ export const blacklistService = {
 
     if (error) throw new Error(error.message);
     return data as GlobalBlacklist[];
+  },
+
+  /**
+   * Upload evidence image
+   */
+  uploadEvidence: async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `evidence_${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    // Using 'driver-images' as generic bucket based on existing buckets
+    const { error: uploadError } = await supabase.storage
+      .from('driver-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      throw new Error(`Upload Failed: ${uploadError.message}`);
+    }
+
+    const { data } = supabase.storage.from('driver-images').getPublicUrl(filePath);
+    return data.publicUrl;
+  },
+
+  /**
+   * Create a new blacklist report
+   */
+  createReport: async (reportData: {
+      target_name: string;
+      target_nik: string;
+      target_phone: string;
+      reason: string;
+      evidence_url?: string;
+  }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      
+      // Get company_id
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+        
+      if (!profileData?.company_id) throw new Error("Company ID not found");
+
+      const { error } = await supabase.from('blacklist_reports').insert({
+          reported_by_company_id: profileData.company_id,
+          target_name: reportData.target_name,
+          target_nik: reportData.target_nik,
+          target_phone: reportData.target_phone,
+          reason: reportData.reason,
+          evidence_url: reportData.evidence_url,
+          status: 'pending'
+      });
+
+      if (error) throw new Error(error.message);
   }
 };
