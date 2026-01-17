@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     darkMode: false,
     
     // Global Defaults
-    globalLogoUrl: '',
+    globalLogoUrl: '/logo-asperda-surabaya.png',
     globalBackgroundUrl: 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=1470&auto=format&fit=crop',
     
     // Auth Page Customization Defaults
