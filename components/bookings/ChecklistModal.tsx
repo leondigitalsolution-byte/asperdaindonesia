@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Booking, BookingChecklist } from '../../types';
+import { Booking, BookingChecklist, BookingStatus } from '../../types';
 import { bookingService } from '../../service/bookingService';
 import { ImageUploader } from '../ImageUploader';
 import { Button } from '../ui/Button';
@@ -72,7 +72,6 @@ export const ChecklistModal: React.FC<Props> = ({ isOpen, onClose, booking, onSa
           const file = new File([blob], `${type}_${position}.jpg`, { type: 'image/jpeg' });
           
           // Upload to Supabase
-          // Note: In real world, we might want to show loading state specifically for image
           const url = await bookingService.uploadChecklistImage(file);
           handleUpdate(type, 'images', url, position);
       } catch (e) {
@@ -84,10 +83,24 @@ export const ChecklistModal: React.FC<Props> = ({ isOpen, onClose, booking, onSa
   const saveChecklist = async () => {
     setLoading(true);
     try {
-      await bookingService.updateBooking(booking.id, {
+      const updates: any = {
         start_checklist: pickupData,
         return_checklist: returnData
-      });
+      };
+
+      // AUTO STATUS UPDATE LOGIC
+      if (activeTab === 'pickup') {
+          // Saving pickup checklist activates the booking
+          updates.status = BookingStatus.ACTIVE;
+      } else if (activeTab === 'return') {
+          // Saving return checklist completes the booking
+          updates.status = BookingStatus.COMPLETED;
+      }
+
+      await bookingService.updateBooking(booking.id, updates);
+      
+      // If completed, finance records are generated automatically by bookingService in the backend logic
+      
       onSave();
       onClose();
     } catch (err: any) {
@@ -202,11 +215,19 @@ export const ChecklistModal: React.FC<Props> = ({ isOpen, onClose, booking, onSa
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 flex justify-end gap-3 bg-slate-50">
-            <Button variant="outline" onClick={onClose}>Tutup</Button>
-            <Button onClick={saveChecklist} isLoading={loading} className="flex items-center gap-2">
-                <Save size={18}/> Simpan Checklist
-            </Button>
+        <div className="p-4 border-t border-slate-200 flex justify-between items-center bg-slate-50">
+            <p className="text-xs text-slate-500 italic">
+                *Simpan checklist akan otomatis mengupdate status Booking menjadi 
+                <strong className={activeTab === 'pickup' ? 'text-blue-600' : 'text-green-600'}>
+                    {activeTab === 'pickup' ? ' ACTIVE (Jalan)' : ' COMPLETED (Selesai)'}
+                </strong>
+            </p>
+            <div className="flex gap-3">
+                <Button variant="outline" onClick={onClose}>Batal</Button>
+                <Button onClick={saveChecklist} isLoading={loading} className={`flex items-center gap-2 ${activeTab === 'return' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                    <Save size={18}/> {activeTab === 'pickup' ? 'Simpan & Aktifkan Unit' : 'Simpan & Selesaikan'}
+                </Button>
+            </div>
         </div>
       </div>
     </div>

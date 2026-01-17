@@ -7,11 +7,12 @@ import { carService } from '../../service/carService';
 import { customerService } from '../../service/customerService';
 import { driverService } from '../../service/driverService';
 import { highSeasonService } from '../../service/highSeasonService';
+import { blacklistService } from '../../service/blacklistService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { Car, Customer, Driver, BookingStatus, DriverOption, AppSettings, PaymentMethod, PayLaterTerm, HighSeason } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { ImageUploader } from '../../components/ImageUploader';
-import { CreditCard, Wallet, QrCode, Clock, CheckCircle, RotateCcw, User as UserIcon, Calendar } from 'lucide-react';
+import { CreditCard, Wallet, QrCode, Clock, CheckCircle, RotateCcw, User as UserIcon, Calendar, ShieldAlert } from 'lucide-react';
 
 export const BookingFormPage: React.FC = () => {
   const navigate = useNavigate();
@@ -48,6 +49,10 @@ export const BookingFormPage: React.FC = () => {
   // Customer Details (Auto-fill or Manual)
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  
+  // Blacklist Alert
+  const [globalBlacklistAlert, setGlobalBlacklistAlert] = useState<{isBlacklisted: boolean, reason: string} | null>(null);
+
   const [rentalPackage, setRentalPackage] = useState('');
   const [destination, setDestination] = useState(''); 
   const [notes, setNotes] = useState('');
@@ -74,8 +79,8 @@ export const BookingFormPage: React.FC = () => {
   const [extraFee, setExtraFee] = useState<number>(0);
   const [extraFeeReason, setExtraFeeReason] = useState('');
   
-  // Existing Status
-  const [status, setStatus] = useState<BookingStatus>(BookingStatus.PENDING);
+  // Existing Status - DEFAULT TO CONFIRMED (BOOKED)
+  const [status, setStatus] = useState<BookingStatus>(BookingStatus.CONFIRMED);
 
   // Init Data
   useEffect(() => {
@@ -212,14 +217,32 @@ export const BookingFormPage: React.FC = () => {
     }
   }, [selectedCarId, cars]);
 
+  // Customer Selection & Blacklist Check
   useEffect(() => {
-    if (selectedCustomerId) {
-      const cust = customers.find(c => c.id === selectedCustomerId);
-      if (cust) {
-        setCustomerName(cust.full_name);
-        setCustomerPhone(cust.phone);
-      }
-    }
+    const checkCustomer = async () => {
+        setGlobalBlacklistAlert(null); // Reset
+        if (selectedCustomerId) {
+            const cust = customers.find(c => c.id === selectedCustomerId);
+            if (cust) {
+                setCustomerName(cust.full_name);
+                setCustomerPhone(cust.phone);
+                
+                // Real-time Global Blacklist Check
+                try {
+                    const blacklistEntry = await blacklistService.checkBlacklistStatus(cust.nik, cust.phone);
+                    if (blacklistEntry) {
+                        setGlobalBlacklistAlert({
+                            isBlacklisted: true,
+                            reason: blacklistEntry.reason
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to check blacklist", e);
+                }
+            }
+        }
+    };
+    checkCustomer();
   }, [selectedCustomerId, customers]);
 
   // Calculations
@@ -313,6 +336,12 @@ export const BookingFormPage: React.FC = () => {
     setLoading(true);
     setError(null);
 
+    if (globalBlacklistAlert) {
+        setError("Transaksi diblokir: Pelanggan terdaftar di Global Blacklist.");
+        setLoading(false);
+        return;
+    }
+
     if (!selectedCarId) {
        setError("Silakan pilih unit mobil.");
        setLoading(false);
@@ -335,12 +364,6 @@ export const BookingFormPage: React.FC = () => {
         setError("Driver yang dipilih sudah terjadwal. Silakan pilih driver lain.");
         setLoading(false);
         return;
-    }
-
-    // Adjust Status automatically for PayLater
-    let finalStatus = status;
-    if (!isEditMode && paymentMethod === PaymentMethod.PAYLATER) {
-        finalStatus = BookingStatus.CONFIRMED; 
     }
 
     let actualReturnDate = undefined;
@@ -369,7 +392,8 @@ export const BookingFormPage: React.FC = () => {
         deposit_value: depositValue,
         deposit_image_url: depositImage || undefined,
         
-        status: finalStatus,
+        // Use current status (defaults to CONFIRMED for new, or existing status for edit)
+        status: status,
         overdue_fee: overdueFee,
         extra_fee: extraFee,
         extra_fee_reason: extraFeeReason,
@@ -403,8 +427,8 @@ export const BookingFormPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto pb-20">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">{isEditMode ? 'Edit Data Transaksi' : 'Buat Order Baru'}</h1>
-        <p className="text-slate-500">Sistem anti-bentrok jadwal otomatis 24/7.</p>
+        <h1 className="text-2xl font-bold text-slate-900">{isEditMode ? 'Edit Data Transaksi' : 'Buat Booking Baru'}</h1>
+        <p className="text-slate-500">Status awal otomatis <strong>BOOKED</strong>.</p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -506,17 +530,39 @@ export const BookingFormPage: React.FC = () => {
           <div className="lg:col-span-7 space-y-6">
             
             {/* SECTION 2: DATA PELANGGAN */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2">1. Data Pelanggan & Tujuan</h3>
+               
+               {/* GLOBAL BLACKLIST ALERT */}
+               {globalBlacklistAlert && (
+                   <div className="bg-red-50 border-l-4 border-red-600 p-4 mb-4 animate-in slide-in-from-top-2 rounded-r-lg">
+                       <div className="flex items-start gap-3">
+                           <ShieldAlert size={24} className="text-red-600 mt-0.5"/>
+                           <div>
+                               <h3 className="text-red-800 font-bold text-sm uppercase">PERINGATAN: PELANGGAN BLACKLIST</h3>
+                               <p className="text-red-700 text-sm mt-1">
+                                   Pelanggan ini terdaftar di Global Blacklist ASPERDA. Transaksi tidak dapat dilanjutkan.
+                               </p>
+                               <p className="text-red-600 text-xs mt-1 font-mono bg-red-100 p-1 rounded">
+                                   Alasan: {globalBlacklistAlert.reason}
+                               </p>
+                           </div>
+                       </div>
+                   </div>
+               )}
+
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cari Pelanggan</label>
                       <select className="w-full border rounded-lg p-2.5 text-sm font-bold bg-white" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} required>
                           <option value="">-- Pilih Pelanggan --</option>
-                          {customers.map(c => <option key={c.id} value={c.id}>{c.full_name} - {c.nik}</option>)}
+                          {customers.map(c => (
+                              <option key={c.id} value={c.id} className={c.is_blacklisted ? 'text-red-600 font-bold' : ''}>
+                                  {c.full_name} - {c.nik} {c.is_blacklisted ? '(BLACKLIST LOKAL)' : ''}
+                              </option>
+                          ))}
                       </select>
                   </div>
-                  {/* Changed Label from Nama to Nomor WhatsApp and Value from Name to Phone */}
                   <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nomor WhatsApp</label>
                       <input 
@@ -736,8 +782,13 @@ export const BookingFormPage: React.FC = () => {
                  </div>
                  <div className="flex gap-3">
                      <Link to="/dashboard/bookings"><Button type="button" variant="secondary" className="bg-slate-700 hover:bg-slate-600 text-white border-none">Batal</Button></Link>
-                     <Button type="submit" isLoading={loading} className="px-8 bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-blue-900/50 shadow-lg">
-                        {isEditMode ? 'UPDATE TRANSAKSI' : 'SIMPAN TRANSAKSI'}
+                     <Button 
+                        type="submit" 
+                        isLoading={loading} 
+                        className={`px-8 font-bold shadow-blue-900/50 shadow-lg ${globalBlacklistAlert ? 'bg-red-600 hover:bg-red-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
+                        disabled={!!globalBlacklistAlert}
+                     >
+                        {globalBlacklistAlert ? 'BLOKIR' : (isEditMode ? 'UPDATE TRANSAKSI' : 'SIMPAN BOOKING')}
                      </Button>
                  </div>
             </div>

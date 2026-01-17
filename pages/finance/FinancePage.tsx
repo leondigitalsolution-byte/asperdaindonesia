@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link } from 'react-router-dom';
 import { financeService } from '../../service/financeService';
 import { FinanceRecord, FinanceType } from '../../types';
@@ -245,12 +246,13 @@ export const FinancePage: React.FC = () => {
                                         </button>
                                     )}
 
-                                    <button 
+                                    <Link 
+                                        to={`/dashboard/finance/edit/${r.id}`}
                                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded border border-transparent transition-colors"
                                         title="Edit"
                                     >
                                         <Edit2 size={14}/>
-                                    </button>
+                                    </Link>
                                     <button 
                                         onClick={() => handleDelete(r.id)} 
                                         className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded border border-transparent transition-colors"

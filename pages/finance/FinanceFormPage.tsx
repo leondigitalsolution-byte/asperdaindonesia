@@ -1,6 +1,7 @@
 
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+// @ts-ignore
+import { useNavigate, Link, useParams } from 'react-router-dom';
 import { financeService } from '../../service/financeService';
 import { FinanceType } from '../../types';
 import { Input } from '../../components/ui/Input';
@@ -9,7 +10,12 @@ import { ImageUploader } from '../../components/ImageUploader';
 
 export const FinanceFormPage: React.FC = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEditMode = !!id;
+
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
+  
   const [formData, setFormData] = useState({
     transaction_date: new Date().toISOString().split('T')[0],
     type: FinanceType.EXPENSE, // Default to Expense
@@ -22,11 +28,42 @@ export const FinanceFormPage: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  useEffect(() => {
+      if (isEditMode && id) {
+          const loadRecord = async () => {
+              setInitialLoading(true);
+              try {
+                  const data = await financeService.getRecordById(id);
+                  setFormData({
+                      transaction_date: data.transaction_date,
+                      type: data.type,
+                      category: data.category,
+                      amount: data.amount,
+                      description: data.description || '',
+                      status: (data.status as 'paid' | 'pending') || 'paid'
+                  });
+                  if (data.proof_image_url) setPreviewUrl(data.proof_image_url);
+              } catch (e) {
+                  console.error(e);
+                  alert("Gagal memuat data transaksi.");
+                  navigate('/dashboard/finance');
+              } finally {
+                  setInitialLoading(false);
+              }
+          };
+          loadRecord();
+      }
+  }, [id, isEditMode, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await financeService.addRecord(formData, imageFile);
+      if (isEditMode && id) {
+          await financeService.updateRecord(id, formData, imageFile);
+      } else {
+          await financeService.addRecord(formData, imageFile);
+      }
       navigate('/dashboard/finance');
     } catch (error) {
       alert("Gagal menyimpan transaksi.");
@@ -50,13 +87,17 @@ export const FinanceFormPage: React.FC = () => {
         });
   };
 
+  if (initialLoading) {
+      return <div className="p-12 text-center text-slate-500">Memuat data...</div>;
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6 flex items-center gap-2">
         <Link to="/dashboard/finance" className="text-slate-500 hover:text-slate-800 transition-colors">
           <i className="fas fa-arrow-left"></i>
         </Link>
-        <h1 className="text-2xl font-bold text-slate-900">Catat Pengeluaran & Setoran</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{isEditMode ? 'Edit Transaksi' : 'Catat Pengeluaran & Setoran'}</h1>
       </div>
       <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -159,7 +200,7 @@ export const FinanceFormPage: React.FC = () => {
           <div className="pt-4 flex gap-3">
              <Button type="button" variant="outline" onClick={() => navigate('/dashboard/finance')}>Batal</Button>
              <Button type="submit" isLoading={loading} className={formData.type === FinanceType.EXPENSE ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
-                Simpan Transaksi
+                {isEditMode ? 'Simpan Perubahan' : 'Simpan Transaksi'}
              </Button>
           </div>
         </form>

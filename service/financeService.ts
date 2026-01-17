@@ -54,6 +54,17 @@ export const financeService = {
     return data as FinanceRecord[];
   },
 
+  getRecordById: async (id: string): Promise<FinanceRecord> => {
+    const { data, error } = await supabase
+      .from('finance_records')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data as FinanceRecord;
+  },
+
   addRecord: async (
     recordData: Omit<FinanceRecord, 'id' | 'company_id' | 'created_at' | 'proof_image_url'>,
     imageFile?: File | null
@@ -80,6 +91,38 @@ export const financeService = {
       })
       .select()
       .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  updateRecord: async (
+    id: string,
+    recordData: Partial<FinanceRecord>,
+    imageFile?: File | null
+  ) => {
+    let updates: any = { ...recordData };
+
+    if (imageFile) {
+        try {
+            const proofUrl = await financeService.uploadFinanceProof(imageFile);
+            updates.proof_image_url = proofUrl;
+        } catch(e) {
+            console.warn("Upload proof failed", e);
+        }
+    }
+
+    // Cleanup
+    delete updates.id;
+    delete updates.company_id;
+    delete updates.created_at;
+
+    const { data, error } = await supabase
+        .from('finance_records')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
     if (error) throw new Error(error.message);
     return data;

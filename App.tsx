@@ -160,6 +160,7 @@ const App: React.FC = () => {
           
           <Route path="finance" element={<FinancePage />} />
           <Route path="finance/new" element={<FinanceFormPage />} />
+          <Route path="finance/edit/:id" element={<FinanceFormPage />} />
 
           {/* New Routes */}
           <Route path="marketplace" element={<MarketplacePage />} />

@@ -25,6 +25,36 @@ export const blacklistService = {
   },
 
   /**
+   * Check if a person is in the Global Blacklist by NIK or Phone
+   * Returns details if found, null if clean.
+   */
+  checkBlacklistStatus: async (nik: string, phone: string): Promise<GlobalBlacklist | null> => {
+    if (!nik && !phone) return null;
+
+    let queryStr = '';
+    if (nik && phone) {
+        queryStr = `nik.eq.${nik},phone.eq.${phone}`;
+    } else if (nik) {
+        queryStr = `nik.eq.${nik}`;
+    } else if (phone) {
+        queryStr = `phone.eq.${phone}`;
+    }
+
+    const { data, error } = await supabase
+        .from('global_blacklists')
+        .select('*')
+        .or(queryStr)
+        .limit(1);
+
+    if (error) {
+        console.error("Error checking blacklist:", error);
+        return null;
+    }
+
+    return (data && data.length > 0) ? data[0] as GlobalBlacklist : null;
+  },
+
+  /**
    * Upload evidence image
    */
   uploadEvidence: async (file: File): Promise<string> => {

@@ -98,15 +98,15 @@ export const BookingListPage: React.FC = () => {
   const getStatusConfig = (status: BookingStatus) => {
     switch(status) {
         case BookingStatus.ACTIVE:
-            return { color: 'border-l-green-500', badge: 'bg-green-600 text-white', label: 'ACTIVE' };
+            return { color: 'border-l-green-500', badge: 'bg-green-600 text-white', label: 'ACTIVE (JALAN)' };
         case BookingStatus.CONFIRMED:
-            return { color: 'border-l-orange-500', badge: 'bg-orange-500 text-white', label: 'BOOKED' }; // Map Confirmed to BOOKED visually
+            return { color: 'border-l-blue-500', badge: 'bg-blue-500 text-white', label: 'BOOKED' }; 
         case BookingStatus.PENDING:
             return { color: 'border-l-yellow-400', badge: 'bg-yellow-400 text-yellow-900', label: 'PENDING' };
         case BookingStatus.COMPLETED:
-            return { color: 'border-l-blue-600', badge: 'bg-blue-600 text-white', label: 'COMPLETED' };
+            return { color: 'border-l-slate-600', badge: 'bg-slate-600 text-white', label: 'COMPLETED' };
         case BookingStatus.CANCELLED:
-            return { color: 'border-l-slate-300', badge: 'bg-slate-200 text-slate-600', label: 'CANCELLED' };
+            return { color: 'border-l-red-300', badge: 'bg-red-200 text-red-600', label: 'CANCELLED' };
         default:
             return { color: 'border-l-gray-300', badge: 'bg-gray-200 text-gray-800', label: status };
     }
@@ -130,18 +130,22 @@ export const BookingListPage: React.FC = () => {
   
   // ACTION BUTTONS HANDLERS
   const handleStatusChange = async (id: string, newStatus: BookingStatus) => {
-      if(!window.confirm(`Ubah status booking menjadi ${newStatus}?`)) return;
+      // Logic restriction: Only allow manual status change via checklist for ACTIVE/COMPLETED
+      // But we keep "Cancel" here.
       
-      try {
-          await bookingService.updateBooking(id, { status: newStatus });
-          fetchBookings(); // Reload data
-      } catch (e: any) {
-          alert("Gagal update status: " + e.message);
+      if (newStatus === BookingStatus.CANCELLED) {
+          if(!window.confirm("Batalkan booking ini? Jadwal mobil akan kembali tersedia untuk orang lain.")) return;
+          try {
+              await bookingService.updateBooking(id, { status: newStatus });
+              fetchBookings(); 
+          } catch (e: any) {
+              alert("Gagal update status: " + e.message);
+          }
       }
   };
   
   const handleLunasi = async (booking: Booking) => {
-      if(window.confirm(`Konfirmasi pelunasan sebesar Rp ${(booking.total_price - (booking.amount_paid || 0)).toLocaleString('id-ID')}?`)) {
+      if(window.confirm(`Konfirmasi pelunasan sebesar Rp ${(booking.total_price - (booking.amount_paid || 0)).toLocaleString('id-ID')}? Sistem akan mencatat Pemasukan di Kas.`)) {
           try {
               await bookingService.updateBooking(booking.id, { 
                   amount_paid: booking.total_price 
@@ -398,10 +402,9 @@ export const BookingListPage: React.FC = () => {
                 onChange={e => setFilterStatus(e.target.value)}
              >
                  <option value="ALL">SEMUA STATUS</option>
+                 <option value={BookingStatus.CONFIRMED}>BOOKED (Baru)</option>
                  <option value={BookingStatus.ACTIVE}>ACTIVE (Jalan)</option>
-                 <option value={BookingStatus.CONFIRMED}>BOOKED</option>
-                 <option value={BookingStatus.PENDING}>PENDING</option>
-                 <option value={BookingStatus.COMPLETED}>COMPLETED</option>
+                 <option value={BookingStatus.COMPLETED}>COMPLETED (Selesai)</option>
                  <option value={BookingStatus.CANCELLED}>CANCELLED</option>
              </select>
         </div>
@@ -475,42 +478,41 @@ export const BookingListPage: React.FC = () => {
 
                                     {/* Action Bar */}
                                     <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-slate-100">
-                                        {/* Main Action Button based on State */}
+                                        
+                                        {/* 1. Payment Action */}
                                         {booking.status !== BookingStatus.CANCELLED && (
-                                            <>
-                                                <button 
-                                                    onClick={() => !isPaidOff && handleLunasi(booking)}
-                                                    disabled={isPaidOff}
-                                                    className={`px-4 py-1.5 rounded text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isPaidOff ? 'bg-green-600 cursor-default opacity-80' : 'bg-green-50 hover:bg-green-600'}`}
-                                                >
-                                                    {isPaidOff ? <CheckCircle size={14}/> : null}
-                                                    {isPaidOff ? 'LUNAS' : 'LUNASI'}
-                                                </button>
-                                                
-                                                {booking.status === BookingStatus.ACTIVE ? (
-                                                     <button 
-                                                        onClick={() => handleStatusChange(booking.id, BookingStatus.COMPLETED)}
-                                                        className="px-4 py-1.5 rounded text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm flex items-center gap-1"
-                                                     >
-                                                        <Clock size={14}/> SELESAI
-                                                     </button>
-                                                ) : booking.status === BookingStatus.CONFIRMED || booking.status === BookingStatus.PENDING ? (
-                                                     <button 
-                                                        onClick={() => handleStatusChange(booking.id, BookingStatus.CANCELLED)}
-                                                        className="px-4 py-1.5 rounded text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 shadow-sm flex items-center gap-1"
-                                                     >
-                                                        <XCircle size={14}/> CANCEL
-                                                     </button>
-                                                ) : null}
-                                            </>
+                                            <button 
+                                                onClick={() => !isPaidOff && handleLunasi(booking)}
+                                                disabled={isPaidOff}
+                                                className={`px-4 py-1.5 rounded text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isPaidOff ? 'bg-green-600 cursor-default opacity-80' : 'bg-green-50 hover:bg-green-600'}`}
+                                            >
+                                                {isPaidOff ? <CheckCircle size={14}/> : null}
+                                                {isPaidOff ? 'LUNAS' : 'LUNASI'}
+                                            </button>
+                                        )}
+
+                                        {/* 2. Checklist Action (Main Status Trigger) */}
+                                        {booking.status !== BookingStatus.CANCELLED && (
+                                            <button 
+                                                onClick={() => handleChecklist(booking)} 
+                                                className={`px-4 py-1.5 rounded text-xs font-bold text-white shadow-sm flex items-center gap-1 ${booking.status === BookingStatus.ACTIVE ? 'bg-indigo-600 hover:bg-indigo-700' : booking.status === BookingStatus.COMPLETED ? 'bg-slate-500 hover:bg-slate-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                            >
+                                                <ClipboardCheck size={14}/> 
+                                                {booking.status === BookingStatus.CONFIRMED ? 'CHECKLIST AWAL' : booking.status === BookingStatus.ACTIVE ? 'CHECKLIST AKHIR (SELESAI)' : 'LIHAT CHECKLIST'}
+                                            </button>
+                                        )}
+
+                                        {/* 3. Cancel Action (Only for Booked) */}
+                                        {booking.status === BookingStatus.CONFIRMED && (
+                                             <button 
+                                                onClick={() => handleStatusChange(booking.id, BookingStatus.CANCELLED)}
+                                                className="px-4 py-1.5 rounded text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 shadow-sm flex items-center gap-1"
+                                             >
+                                                <XCircle size={14}/> CANCEL
+                                             </button>
                                         )}
 
                                         <div className="w-px h-6 bg-slate-200 mx-2 hidden sm:block"></div>
-
-                                        {/* Utility Buttons */}
-                                        <button onClick={() => handleChecklist(booking)} className="px-3 py-1.5 rounded text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 flex items-center gap-1 transition-colors">
-                                            <ClipboardCheck size={14}/> Checklist
-                                        </button>
                                         
                                         <button onClick={() => handleWhatsApp(booking)} className="px-3 py-1.5 rounded text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 flex items-center gap-1 transition-colors">
                                             <MessageCircle size={14}/> Kirim WA
