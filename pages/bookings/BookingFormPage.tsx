@@ -425,10 +425,10 @@ export const BookingFormPage: React.FC = () => {
   const paymentStatus = amountPaid >= totalCost ? 'LUNAS' : 'BELUM LUNAS';
 
   return (
-    <div className="max-w-7xl mx-auto pb-20">
+    <div className="max-w-7xl mx-auto pb-32">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">{isEditMode ? 'Edit Data Transaksi' : 'Buat Booking Baru'}</h1>
-        <p className="text-slate-500">Status awal otomatis <strong>BOOKED</strong>.</p>
+        <p className="text-slate-500 text-sm">Status awal otomatis <strong>BOOKED</strong>.</p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -437,7 +437,7 @@ export const BookingFormPage: React.FC = () => {
           {/* LEFT COLUMN (Unit & Time) */}
           <div className="lg:col-span-5 space-y-6">
             {/* SECTION 1: WAKTU & UNIT */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                  <Clock className="text-blue-600" size={16}/> Waktu & Unit
                </h3>
@@ -512,7 +512,7 @@ export const BookingFormPage: React.FC = () => {
             </div>
 
             {/* SECTION: JAMINAN */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">Jaminan</h3>
                <div className="flex bg-slate-100 p-1 rounded-lg mb-4">
                    <button type="button" className={`flex-1 py-1.5 text-xs font-bold rounded-md ${depositType === 'barang' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`} onClick={() => setDepositType('barang')}>Barang / Dokumen</button>
@@ -530,7 +530,7 @@ export const BookingFormPage: React.FC = () => {
           <div className="lg:col-span-7 space-y-6">
             
             {/* SECTION 2: DATA PELANGGAN */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 relative">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2">1. Data Pelanggan & Tujuan</h3>
                
                {/* GLOBAL BLACKLIST ALERT */}
@@ -551,8 +551,8 @@ export const BookingFormPage: React.FC = () => {
                    </div>
                )}
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2 md:col-span-1">
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cari Pelanggan</label>
                       <select className="w-full border rounded-lg p-2.5 text-sm font-bold bg-white" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} required>
                           <option value="">-- Pilih Pelanggan --</option>
@@ -563,7 +563,7 @@ export const BookingFormPage: React.FC = () => {
                           ))}
                       </select>
                   </div>
-                  <div>
+                  <div className="sm:col-span-2 md:col-span-1">
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nomor WhatsApp</label>
                       <input 
                         className="w-full border rounded-lg p-2.5 text-sm bg-slate-50 font-mono text-slate-700" 
@@ -589,7 +589,7 @@ export const BookingFormPage: React.FC = () => {
             </div>
 
             {/* SECTION 3: BIAYA */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2">2. Summary & Biaya</h3>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    <div className="space-y-4">
@@ -629,7 +629,7 @@ export const BookingFormPage: React.FC = () => {
             </div>
 
             {/* SECTION 4: PEMBAYARAN */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                  <Wallet className="text-blue-600" size={16}/> 3. Metode Pembayaran
                </h3>
@@ -648,7 +648,7 @@ export const BookingFormPage: React.FC = () => {
                                 className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all ${paymentMethod === method.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}
                            >
                                {method.icon}
-                               <span className="text-xs font-bold">{method.label}</span>
+                               <span className="text-xs font-bold text-center">{method.label}</span>
                            </div>
                        ))}
                    </div>
@@ -669,7 +669,7 @@ export const BookingFormPage: React.FC = () => {
                                    <option value={3}>Cicilan 3 Bulan</option>
                                    <option value={6}>Cicilan 6 Bulan</option>
                                    <option value={12}>Cicilan 12 Bulan</option>
-                               </select>
+                                </select>
                            </div>
                            <div>
                                <label className="block text-[10px] font-bold text-orange-700 uppercase mb-1">Simulasi Cicilan (Per Bulan)</label>
@@ -712,7 +712,7 @@ export const BookingFormPage: React.FC = () => {
             </div>
 
             {/* SECTION 5: PENGEMBALIAN UNIT (Return) */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                     <RotateCcw className="text-blue-600" size={16}/> 4. PENGEMBALIAN UNIT
                 </h3>
@@ -775,20 +775,20 @@ export const BookingFormPage: React.FC = () => {
             </div>
 
             {/* ACTION BAR */}
-            <div className="bg-slate-900 p-4 rounded-xl shadow-lg flex justify-between items-center sticky bottom-6 z-10">
+            <div className="bg-slate-900 p-4 rounded-xl shadow-lg flex justify-between items-center fixed md:sticky bottom-4 md:bottom-6 left-4 right-4 md:left-auto md:right-auto z-40 safe-area-pb">
                  <div className="text-white">
                      <p className="text-xs opacity-70">Total Transaksi</p>
-                     <p className="text-xl font-bold">Rp {totalCost.toLocaleString('id-ID')}</p>
+                     <p className="text-lg md:text-xl font-bold">Rp {totalCost.toLocaleString('id-ID')}</p>
                  </div>
                  <div className="flex gap-3">
-                     <Link to="/dashboard/bookings"><Button type="button" variant="secondary" className="bg-slate-700 hover:bg-slate-600 text-white border-none">Batal</Button></Link>
+                     <Link to="/dashboard/bookings"><Button type="button" variant="secondary" className="bg-slate-700 hover:bg-slate-600 text-white border-none text-sm px-3 md:px-4">Batal</Button></Link>
                      <Button 
                         type="submit" 
                         isLoading={loading} 
-                        className={`px-8 font-bold shadow-blue-900/50 shadow-lg ${globalBlacklistAlert ? 'bg-red-600 hover:bg-red-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
+                        className={`px-4 md:px-8 font-bold shadow-blue-900/50 shadow-lg text-sm ${globalBlacklistAlert ? 'bg-red-600 hover:bg-red-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
                         disabled={!!globalBlacklistAlert}
                      >
-                        {globalBlacklistAlert ? 'BLOKIR' : (isEditMode ? 'UPDATE TRANSAKSI' : 'SIMPAN BOOKING')}
+                        {globalBlacklistAlert ? 'BLOKIR' : (isEditMode ? 'UPDATE' : 'SIMPAN')}
                      </Button>
                  </div>
             </div>

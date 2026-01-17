@@ -6,7 +6,7 @@ import { bookingService } from '../../service/bookingService';
 import { Booking, BookingStatus, AppSettings, DriverOption } from '../../types';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, Printer, Download } from 'lucide-react';
+import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, Printer, Download, Plus } from 'lucide-react';
 import { ChecklistModal } from '../../components/bookings/ChecklistModal';
 
 export const BookingListPage: React.FC = () => {
@@ -369,28 +369,28 @@ export const BookingListPage: React.FC = () => {
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
             <h1 className="text-2xl font-bold text-slate-900">Data Transaksi Sewa</h1>
-            <Link to="/dashboard/bookings/new">
-                <Button className="!w-auto"><i className="fas fa-plus mr-2"></i> Buat Order Baru</Button>
+            <Link to="/dashboard/bookings/new" className="w-full sm:w-auto">
+                <Button className="!w-full sm:!w-auto flex items-center justify-center"><i className="fas fa-plus mr-2"></i> Buat Order Baru</Button>
             </Link>
         </div>
 
         {/* Filter Card */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-3">
-             <div className="flex items-center gap-2 text-slate-500 text-sm font-bold min-w-fit">
-                 <Filter size={16}/> FILTER DATA:
+             <div className="flex items-center gap-2 text-slate-500 text-sm font-bold w-full md:w-auto">
+                 <Filter size={16}/> FILTER:
              </div>
              
-             <div className="flex items-center gap-2 w-full md:w-auto">
+             <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
                  <input 
                     type="date" 
-                    className="border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full sm:w-auto border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
                     value={filterStartDate}
                     onChange={e => setFilterStartDate(e.target.value)}
                  />
-                 <span className="text-slate-400 text-sm">sampai</span>
+                 <span className="text-slate-400 text-sm hidden sm:inline">s/d</span>
                  <input 
                     type="date" 
-                    className="border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full sm:w-auto border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
                     value={filterEndDate}
                     onChange={e => setFilterEndDate(e.target.value)}
                  />
@@ -438,40 +438,40 @@ export const BookingListPage: React.FC = () => {
                         {/* Icon & Main Info */}
                         <div className="p-4 flex-1">
                             <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 flex-shrink-0">
+                                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 flex-shrink-0 hidden sm:flex">
                                     <CarIcon size={24} />
                                 </div>
                                 <div className="w-full">
-                                    <div className="flex justify-between items-start">
+                                    <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
                                         <div>
-                                            <h3 className="text-lg font-black text-slate-900 uppercase">{booking.cars?.brand} {booking.cars?.model}</h3>
+                                            <h3 className="text-lg font-black text-slate-900 uppercase leading-tight">{booking.cars?.brand} {booking.cars?.model}</h3>
                                             <span className="inline-block bg-slate-100 text-slate-600 text-xs font-bold px-2 py-0.5 rounded border border-slate-200 mt-1">
                                                 {booking.cars?.license_plate}
                                             </span>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${statusStyle.badge}`}>
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit ${statusStyle.badge}`}>
                                             {statusStyle.label}
                                         </span>
                                     </div>
                                     
                                     {/* Info Grid */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-3 gap-x-4 mt-4">
                                         <div className="flex items-center gap-2 text-sm text-slate-600">
-                                            <Calendar size={16} className="text-blue-500"/>
-                                            <span className="font-medium">{formatDate(booking.start_date)}</span>
+                                            <Calendar size={16} className="text-blue-500 flex-shrink-0"/>
+                                            <span className="font-medium truncate">{formatDate(booking.start_date)}</span>
                                         </div>
                                         <div className="flex items-center gap-2 text-sm text-slate-600">
-                                            <Clock size={16} className="text-orange-500"/>
+                                            <Clock size={16} className="text-orange-500 flex-shrink-0"/>
                                             <span className="font-bold text-orange-600 uppercase">{getDurationDays(booking.start_date, booking.end_date)} HARI</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                                            <User size={16} className="text-blue-500"/>
-                                            <span className="font-bold text-blue-600 uppercase text-xs">{booking.customers?.full_name}</span>
+                                        <div className="flex items-center gap-2 text-sm text-slate-600 col-span-2 sm:col-span-1">
+                                            <User size={16} className="text-blue-500 flex-shrink-0"/>
+                                            <span className="font-bold text-blue-600 uppercase text-xs truncate">{booking.customers?.full_name}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm text-slate-600">
+                                        <div className="flex items-center gap-2 text-sm text-slate-600 col-span-2 sm:col-span-1">
                                             <span className="font-bold text-red-600">Rp {booking.total_price.toLocaleString('id-ID')}</span>
                                             {remaining > 0 && (
-                                                <span className="text-[10px] text-red-400 font-medium">(Sisa: {remaining.toLocaleString('id-ID')})</span>
+                                                <span className="text-[10px] text-red-400 font-medium whitespace-nowrap">(Sisa: {remaining.toLocaleString('id-ID')})</span>
                                             )}
                                         </div>
                                     </div>
@@ -484,10 +484,10 @@ export const BookingListPage: React.FC = () => {
                                             <button 
                                                 onClick={() => !isPaidOff && handleLunasi(booking)}
                                                 disabled={isPaidOff}
-                                                className={`px-4 py-1.5 rounded text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isPaidOff ? 'bg-green-600 cursor-default opacity-80' : 'bg-green-50 hover:bg-green-600'}`}
+                                                className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded text-xs font-bold text-white flex items-center gap-1 shadow-sm ${isPaidOff ? 'bg-green-600 cursor-default opacity-80' : 'bg-green-50 hover:bg-green-600 text-green-700 hover:text-white border border-green-200 hover:border-transparent'}`}
                                             >
                                                 {isPaidOff ? <CheckCircle size={14}/> : null}
-                                                {isPaidOff ? 'LUNAS' : 'LUNASI'}
+                                                {isPaidOff ? 'LUNAS' : 'BAYAR'}
                                             </button>
                                         )}
 
@@ -495,10 +495,10 @@ export const BookingListPage: React.FC = () => {
                                         {booking.status !== BookingStatus.CANCELLED && (
                                             <button 
                                                 onClick={() => handleChecklist(booking)} 
-                                                className={`px-4 py-1.5 rounded text-xs font-bold text-white shadow-sm flex items-center gap-1 ${booking.status === BookingStatus.ACTIVE ? 'bg-indigo-600 hover:bg-indigo-700' : booking.status === BookingStatus.COMPLETED ? 'bg-slate-500 hover:bg-slate-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                                className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded text-xs font-bold text-white shadow-sm flex items-center gap-1 ${booking.status === BookingStatus.ACTIVE ? 'bg-indigo-600 hover:bg-indigo-700' : booking.status === BookingStatus.COMPLETED ? 'bg-slate-500 hover:bg-slate-600' : 'bg-blue-600 hover:bg-blue-700'}`}
                                             >
                                                 <ClipboardCheck size={14}/> 
-                                                {booking.status === BookingStatus.CONFIRMED ? 'CHECKLIST AWAL' : booking.status === BookingStatus.ACTIVE ? 'CHECKLIST AKHIR (SELESAI)' : 'LIHAT CHECKLIST'}
+                                                {booking.status === BookingStatus.CONFIRMED ? 'CHECKLIST' : booking.status === BookingStatus.ACTIVE ? 'SELESAI' : 'CHECKLIST'}
                                             </button>
                                         )}
 
@@ -506,31 +506,31 @@ export const BookingListPage: React.FC = () => {
                                         {booking.status === BookingStatus.CONFIRMED && (
                                              <button 
                                                 onClick={() => handleStatusChange(booking.id, BookingStatus.CANCELLED)}
-                                                className="px-4 py-1.5 rounded text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 shadow-sm flex items-center gap-1"
+                                                className="px-4 py-2 rounded text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 shadow-sm flex items-center gap-1"
                                              >
-                                                <XCircle size={14}/> CANCEL
+                                                <XCircle size={14}/> BATAL
                                              </button>
                                         )}
 
-                                        <div className="w-px h-6 bg-slate-200 mx-2 hidden sm:block"></div>
+                                        <div className="hidden sm:block w-px h-6 bg-slate-200 mx-2"></div>
                                         
-                                        <button onClick={() => handleWhatsApp(booking)} className="px-3 py-1.5 rounded text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 flex items-center gap-1 transition-colors">
-                                            <MessageCircle size={14}/> Kirim WA
+                                        <button onClick={() => handleWhatsApp(booking)} className="flex-1 sm:flex-none justify-center px-3 py-2 rounded text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 flex items-center gap-1 transition-colors">
+                                            <MessageCircle size={14}/> WA
                                         </button>
                                         
                                         {/* PDF Dropdown */}
-                                        <div className="relative">
+                                        <div className="relative flex-1 sm:flex-none">
                                             <button 
                                                 onClick={() => setOpenDropdownId(openDropdownId === booking.id ? null : booking.id)}
-                                                className="px-3 py-1.5 rounded text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center gap-1 transition-colors"
+                                                className="w-full justify-center px-3 py-2 rounded text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center gap-1 transition-colors"
                                             >
-                                                <FileText size={14}/> PDF Invoice <ChevronDown size={12}/>
+                                                <FileText size={14}/> Invoice <ChevronDown size={12}/>
                                             </button>
                                             
                                             {openDropdownId === booking.id && (
                                                 <>
                                                     <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownId(null)}></div>
-                                                    <div className="absolute top-full left-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-20 overflow-hidden">
+                                                    <div className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-20 overflow-hidden">
                                                         <button 
                                                             onClick={() => { handlePrintInvoice(booking); setOpenDropdownId(null); }}
                                                             className="w-full text-left px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-50"
@@ -548,9 +548,9 @@ export const BookingListPage: React.FC = () => {
                                             )}
                                         </div>
                                         
-                                        <div className="flex-1"></div>
+                                        <div className="flex-1 sm:hidden"></div>
 
-                                        <div className="flex gap-1">
+                                        <div className="flex gap-1 ml-auto">
                                             <Link to={`/dashboard/bookings/edit/${booking.id}`} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Edit Booking">
                                                 <Edit size={16}/>
                                             </Link>

@@ -1,4 +1,6 @@
+
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link } from 'react-router-dom';
 import { carService } from '../../service/carService';
 import { Car, CarStatus, MaintenanceType } from '../../types';
@@ -78,14 +80,14 @@ export const CarListPage: React.FC = () => {
   };
 
   return (
-    <div>
+    <div className="pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Armada Mobil</h1>
           <p className="text-slate-500 text-sm">Kelola daftar kendaraan rental Anda.</p>
         </div>
-        <Link to="/dashboard/cars/new">
-          <Button>
+        <Link to="/dashboard/cars/new" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto">
             <i className="fas fa-plus mr-2"></i> Tambah Unit
           </Button>
         </Link>
@@ -141,7 +143,7 @@ export const CarListPage: React.FC = () => {
           {cars.map((car) => {
             const maintStatus = getMaintenanceStatus(car);
             return (
-            <div key={car.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group relative">
+            <div key={car.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group relative flex flex-col">
               <div className="relative h-48 bg-slate-100 overflow-hidden">
                 {car.image_url ? (
                   <img src={car.image_url} alt={car.model} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -166,7 +168,7 @@ export const CarListPage: React.FC = () => {
                     </div>
                 )}
               </div>
-              <div className="p-4">
+              <div className="p-4 flex-1 flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <h3 className="font-bold text-slate-900 text-lg leading-tight">{car.brand} {car.model}</h3>
@@ -195,7 +197,7 @@ export const CarListPage: React.FC = () => {
                    <span>KM: {(car.current_odometer || 0).toLocaleString('id-ID')}</span>
                 </div>
 
-                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                <div className="mt-auto flex justify-between items-center pt-3 border-t border-slate-100">
                    <p className="text-primary font-bold">
                      Rp {car.price_per_day.toLocaleString('id-ID')} <span className="text-xs text-slate-400 font-normal">/hari</span>
                    </p>
@@ -203,19 +205,19 @@ export const CarListPage: React.FC = () => {
                    <div className="flex items-center gap-2">
                         <Link 
                             to={`/dashboard/cars/edit/${car.id}`} 
-                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1.5 rounded hover:bg-indigo-50"
+                            className="text-slate-400 hover:text-indigo-600 transition-colors p-2 rounded hover:bg-indigo-50"
                             title="Edit Data"
                         >
-                            <Edit2 size={16} />
+                            <Edit2 size={18} />
                         </Link>
-                       <button className="text-slate-400 hover:text-red-500 transition-colors p-1.5 rounded hover:bg-red-50" 
+                       <button className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded hover:bg-red-50" 
                         title="Hapus Mobil"
                         onClick={() => {
                          if(window.confirm('Hapus mobil ini?')) {
                            carService.deleteCar(car.id).then(fetchCars);
                          }
                        }}>
-                         <i className="fas fa-trash-alt"></i>
+                         <i className="fas fa-trash-alt text-lg"></i>
                        </button>
                    </div>
                 </div>

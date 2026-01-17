@@ -23,12 +23,13 @@ import { GlobalBlacklistPage } from './pages/blacklist/GlobalBlacklistPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import CalculatorPage from './pages/calculator/CalculatorPage';
 import { HighSeasonPage } from './pages/high-season/HighSeasonPage';
+import { HelpPage } from './pages/help/HelpPage'; // IMPORT HELP PAGE
 
 // Admin Pages
 import { AdminMemberApprovalPage } from './pages/admin/AdminMemberApprovalPage';
 import { AdminBlacklistReviewPage } from './pages/admin/AdminBlacklistReviewPage';
 import { AdminDpcManagementPage } from './pages/admin/AdminDpcManagementPage';
-import { AdminPayLaterPage } from './pages/admin/AdminPayLaterPage'; // NEW
+import { AdminPayLaterPage } from './pages/admin/AdminPayLaterPage';
 
 // Koperasi Pages
 import { CoopMemberListPage } from './pages/coop/CoopMemberListPage';
@@ -175,13 +176,13 @@ const App: React.FC = () => {
           <Route path="tracking" element={<UnderConstruction title="Tracking Unit" />} />
           <Route path="statistics" element={<UnderConstruction title="Laporan Statistik" />} />
           <Route path="high-season" element={<HighSeasonPage />} />
-          <Route path="help" element={<UnderConstruction title="Bantuan & FAQ" />} />
+          <Route path="help" element={<HelpPage />} /> {/* UPDATED HERE */}
 
           {/* Admin Routes */}
           <Route path="admin/members" element={<AdminMemberApprovalPage />} />
           <Route path="admin/blacklist-review" element={<AdminBlacklistReviewPage />} />
           <Route path="admin/dpc" element={<AdminDpcManagementPage />} />
-          <Route path="admin/paylater" element={<AdminPayLaterPage />} /> {/* NEW */}
+          <Route path="admin/paylater" element={<AdminPayLaterPage />} />
           
           {/* Koperasi Routes */}
           <Route path="coop" element={<CoopMemberListPage />} />
