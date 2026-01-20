@@ -1,13 +1,15 @@
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { marketplaceService } from '../../service/marketplaceService';
 import { marketplaceRequestService } from '../../service/marketplaceRequestService';
 import { authService } from '../../service/authService';
 import { Car, DpcRegion, Driver, ReviewDisplay, MarketplaceRequest } from '../../types';
-import { Search, MapPin, Calendar, Building, Fuel, Settings, Zap, Star, UserCheck, X, Image as ImageIcon, MessageCircle, User, Clock, CheckCircle, XCircle, ShoppingBag, Car as CarIcon } from 'lucide-react';
+import { Search, MapPin, Calendar, Building, Fuel, Settings, Zap, Star, UserCheck, X, Image as ImageIcon, MessageCircle, User, Clock, CheckCircle, XCircle, ShoppingBag, Car as CarIcon, ArrowRight, FileText } from 'lucide-react';
 
 export const MarketplacePage: React.FC = () => {
-  const [activeMainTab, setActiveMainTab] = useState<'browse' | 'r2r_incoming'>('browse');
+  const navigate = useNavigate();
+  const [activeMainTab, setActiveMainTab] = useState<'browse' | 'r2r_incoming' | 'r2r_outgoing'>('browse');
 
   const [cars, setCars] = useState<Car[]>([]);
   const [dpcRegions, setDpcRegions] = useState<DpcRegion[]>([]);
@@ -41,9 +43,10 @@ export const MarketplacePage: React.FC = () => {
   const [reviews, setReviews] = useState<ReviewDisplay[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
 
-  // R2R Incoming Requests State
+  // R2R Lists
   const [incomingRequests, setIncomingRequests] = useState<MarketplaceRequest[]>([]);
-  const [loadingIncoming, setLoadingIncoming] = useState(false);
+  const [outgoingRequests, setOutgoingRequests] = useState<MarketplaceRequest[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
 
   // Booking Confirmation Modal
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -53,16 +56,13 @@ export const MarketplacePage: React.FC = () => {
   useEffect(() => {
     const initPage = async () => {
       try {
-        // Fetch Regions first
         const regions = await authService.getDpcRegions();
         setDpcRegions(regions || []);
 
-        // Default DPC
         const surabaya = regions?.find(r => r.name.toLowerCase().includes('surabaya'));
         let defaultDpcId = surabaya ? surabaya.id : (regions[0]?.id || '');
         setSelectedDpc(defaultDpcId);
         
-        // Initial Fetch
         await loadCars(defaultDpcId, getToday(), getTomorrow(), '');
 
       } catch (err) {
@@ -74,10 +74,12 @@ export const MarketplacePage: React.FC = () => {
     initPage();
   }, []);
 
-  // Effect to load incoming when tab switches
+  // Effect to load lists when tab switches
   useEffect(() => {
       if (activeMainTab === 'r2r_incoming') {
           loadIncomingRequests();
+      } else if (activeMainTab === 'r2r_outgoing') {
+          loadOutgoingRequests();
       }
   }, [activeMainTab]);
 
@@ -102,15 +104,19 @@ export const MarketplacePage: React.FC = () => {
   };
 
   const loadIncomingRequests = async () => {
-      setLoadingIncoming(true);
+      setLoadingList(true);
       try {
           const data = await marketplaceRequestService.getIncomingRequests();
           setIncomingRequests(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setLoadingIncoming(false);
-      }
+      } catch (e) { console.error(e); } finally { setLoadingList(false); }
+  };
+
+  const loadOutgoingRequests = async () => {
+      setLoadingList(true);
+      try {
+          const data = await marketplaceRequestService.getOutgoingRequests();
+          setOutgoingRequests(data);
+      } catch (e) { console.error(e); } finally { setLoadingList(false); }
   };
 
   const handleFilter = (e: React.FormEvent) => {
@@ -127,16 +133,10 @@ export const MarketplacePage: React.FC = () => {
       setModalTab('details'); // Reset tab
       
       setLoadingDrivers(true);
-      
-      // Load available drivers from same company
       try {
           const drivers = await marketplaceService.getAvailableDrivers(car.company_id, startDate, endDate);
           setAvailableDrivers(drivers);
-      } catch (e) {
-          console.error("Failed to load drivers", e);
-      } finally {
-          setLoadingDrivers(false);
-      }
+      } catch (e) { console.error(e); } finally { setLoadingDrivers(false); }
   };
 
   const loadReviews = async () => {
@@ -145,18 +145,11 @@ export const MarketplacePage: React.FC = () => {
       try {
           const data = await marketplaceService.getCarReviews(selectedCar.id);
           setReviews(data);
-      } catch (e) {
-          console.error("Failed to load reviews", e);
-      } finally {
-          setLoadingReviews(false);
-      }
+      } catch (e) { console.error(e); } finally { setLoadingReviews(false); }
   };
 
-  // Trigger load reviews when switching tab
   useEffect(() => {
-      if (modalTab === 'reviews' && reviews.length === 0) {
-          loadReviews();
-      }
+      if (modalTab === 'reviews' && reviews.length === 0) loadReviews();
   }, [modalTab]);
 
   const closeModal = () => {
@@ -188,12 +181,13 @@ export const MarketplacePage: React.FC = () => {
               supplier_company_id: selectedCar.company_id,
               car_id: selectedCar.id,
               driver_id: selectedDriver?.id,
-              start_date: `${startDate}T08:00:00`, // Default time
+              start_date: `${startDate}T08:00:00`,
               end_date: `${endDate}T08:00:00`,
               total_price: calculateTotalPrice()
           });
-          alert("Permintaan sewa berhasil dikirim! Mohon tunggu konfirmasi dari pemilik rental.");
+          alert("Permintaan sewa berhasil dikirim! Cek status di tab 'Status Order Saya'.");
           closeModal();
+          setActiveMainTab('r2r_outgoing');
       } catch (err: any) {
           alert("Gagal mengirim permintaan: " + err.message);
       } finally {
@@ -201,33 +195,42 @@ export const MarketplacePage: React.FC = () => {
       }
   };
 
-  // R2R Actions
-  const handleApproveRequest = async (req: MarketplaceRequest) => {
-      if(!window.confirm(`Terima pesanan dari ${(req as any).requester?.name}? Sistem akan otomatis membuat Booking Confirmed.`)) return;
-      
-      try {
-          await marketplaceRequestService.approveRequest(req);
-          loadIncomingRequests();
-          alert("Pesanan diterima! Cek menu List Transaksi untuk melihat booking baru.");
-      } catch(e: any) {
-          alert("Error: " + e.message);
-      }
+  // --- ACTIONS ---
+
+  // SUPPLIER ACTIONS
+  const handleProcessOrder = (req: MarketplaceRequest) => {
+      // Redirect to Booking Form with state to pre-fill
+      navigate('/dashboard/bookings/new', { 
+          state: { 
+              r2rRequest: req,
+              mode: 'supplier_process' // Mode: I am supplier accepting an order
+          }
+      });
   };
 
   const handleRejectRequest = async (id: string) => {
       if(!window.confirm("Tolak pesanan ini?")) return;
       try {
-          await marketplaceRequestService.rejectRequest(id);
+          await marketplaceRequestService.updateStatus(id, 'rejected');
           loadIncomingRequests();
       } catch(e: any) {
           alert("Error: " + e.message);
       }
   };
 
-  // Determine car category image
+  // RENTER ACTIONS
+  const handleCreateCustomerInvoice = (req: MarketplaceRequest) => {
+      // Redirect to Booking Form with state to pre-fill
+      navigate('/dashboard/bookings/new', { 
+          state: { 
+              r2rRequest: req,
+              mode: 'renter_create' // Mode: I am renter creating invoice for my customer using external car
+          } 
+      });
+  };
+
   const getCarImage = (car: Car) => {
       if (car.image_url) return car.image_url;
-      // Fallbacks based on name
       const t = (car.brand + " " + car.model).toLowerCase();
       if (t.includes('innova') || t.includes('zenix')) return 'https://images.unsplash.com/photo-1609520505218-7421da3b3d80?auto=format&fit=crop&q=80&w=400';
       if (t.includes('alphard') || t.includes('vellfire')) return 'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&q=80&w=400';
@@ -237,15 +240,10 @@ export const MarketplacePage: React.FC = () => {
       return 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&q=80&w=400'; 
   };
 
-  const handleBookingProcess = () => {
-      if (!selectedCar) return;
-      const ownerPhone = (selectedCar.companies as any)?.phone;
-      if (!ownerPhone) {
-          alert("Nomor telepon rental tidak tersedia.");
-          return;
-      }
-      
-      const message = `Halo, saya tertarik dengan unit ${selectedCar.brand} ${selectedCar.model} di Marketplace ASPERDA. Apakah tersedia untuk tanggal ${new Date(startDate).toLocaleDateString('id-ID')} s.d ${new Date(endDate).toLocaleDateString('id-ID')}?`;
+  const handleManualWA = (car: Car) => {
+      const ownerPhone = (car.companies as any)?.phone;
+      if (!ownerPhone) return;
+      const message = `Halo, saya tertarik dengan unit ${car.brand} ${car.model} di Marketplace ASPERDA.`;
       window.open(`https://wa.me/${ownerPhone.replace(/^0/, '62')}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -253,9 +251,7 @@ export const MarketplacePage: React.FC = () => {
       <div className="flex items-center gap-1">
           <Star size={12} className={rating > 0 ? "fill-yellow-400 text-yellow-400" : "fill-slate-200 text-slate-300"} />
           <span className="text-xs font-bold text-slate-700">{rating > 0 ? rating : '0'}</span>
-          {count !== undefined && (
-              <span className="text-[10px] text-slate-400">({count})</span>
-          )}
+          {count !== undefined && <span className="text-[10px] text-slate-400">({count})</span>}
       </div>
   );
 
@@ -266,7 +262,7 @@ export const MarketplacePage: React.FC = () => {
       useEffect(() => {
           const timer = setInterval(() => {
               const created = new Date(createdAt).getTime();
-              const expireTime = created + (60 * 60 * 1000); // 60 mins
+              const expireTime = created + (60 * 60 * 1000); 
               const now = new Date().getTime();
               const diff = expireTime - now;
 
@@ -308,18 +304,24 @@ export const MarketplacePage: React.FC = () => {
                   </div>
                   
                   {/* MAIN TABS SWITCHER */}
-                  <div className="bg-white/10 backdrop-blur-md p-1 rounded-xl flex gap-1">
+                  <div className="bg-white/10 backdrop-blur-md p-1 rounded-xl flex gap-1 overflow-x-auto">
                       <button 
                         onClick={() => setActiveMainTab('browse')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeMainTab === 'browse' ? 'bg-white text-slate-900 shadow-lg' : 'text-blue-200 hover:bg-white/5'}`}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeMainTab === 'browse' ? 'bg-white text-slate-900 shadow-lg' : 'text-blue-200 hover:bg-white/5'}`}
                       >
-                          <Search className="inline-block mr-2" size={16}/> Cari Unit
+                          <Search className="inline-block mr-2" size={14}/> Cari Unit
+                      </button>
+                      <button 
+                        onClick={() => setActiveMainTab('r2r_outgoing')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeMainTab === 'r2r_outgoing' ? 'bg-white text-slate-900 shadow-lg' : 'text-blue-200 hover:bg-white/5'}`}
+                      >
+                          <ShoppingBag className="inline-block mr-2" size={14}/> Status Order Saya
                       </button>
                       <button 
                         onClick={() => setActiveMainTab('r2r_incoming')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeMainTab === 'r2r_incoming' ? 'bg-white text-slate-900 shadow-lg' : 'text-blue-200 hover:bg-white/5'}`}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeMainTab === 'r2r_incoming' ? 'bg-white text-slate-900 shadow-lg' : 'text-blue-200 hover:bg-white/5'}`}
                       >
-                          <ShoppingBag className="inline-block mr-2" size={16}/> Pesanan Masuk
+                          <ArrowRight className="inline-block mr-2" size={14}/> Pesanan Masuk
                           {/* Badge placeholder if needed */}
                       </button>
                   </div>
@@ -333,7 +335,6 @@ export const MarketplacePage: React.FC = () => {
                               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><Search size={10} /> Cari Unit</label>
                               <input type="text" className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-800 focus:ring-0 placeholder-slate-400" placeholder="Ketik Merk / Tipe..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/>
                           </div>
-                          <div className="w-px h-10 bg-slate-200 hidden lg:block self-center"></div>
                           <div className="lg:w-48 bg-slate-50 rounded-lg border border-slate-200 px-3 py-2 hover:border-blue-400 transition-colors">
                               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><MapPin size={10} /> Wilayah</label>
                               <select className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-800 focus:ring-0 cursor-pointer" value={selectedDpc} onChange={(e) => setSelectedDpc(e.target.value)}>
@@ -341,7 +342,6 @@ export const MarketplacePage: React.FC = () => {
                                   {dpcRegions.map((dpc) => (<option key={dpc.id} value={dpc.id}>{dpc.name}</option>))}
                               </select>
                           </div>
-                          <div className="w-px h-10 bg-slate-200 hidden lg:block self-center"></div>
                           <div className="flex gap-2 lg:contents">
                               <div className="flex-1 bg-slate-50 rounded-lg border border-slate-200 px-3 py-2 hover:border-blue-400 transition-colors">
                                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><Calendar size={10} /> Ambil</label>
@@ -366,31 +366,18 @@ export const MarketplacePage: React.FC = () => {
       {/* CONTENT AREA */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16">
           
-          {/* TAB 1: BROWSE (Original) */}
+          {/* TAB 1: BROWSE */}
           {activeMainTab === 'browse' && (
               <>
-                {error && (
-                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-6 flex items-center gap-3">
-                    <i className="fas fa-exclamation-triangle text-red-500"></i>
-                    <span className="text-red-700 font-medium">{error}</span>
-                    </div>
-                )}
-
+                {error && <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg mb-6 flex items-center gap-3"><i className="fas fa-exclamation-triangle text-red-500"></i><span className="text-red-700 font-medium">{error}</span></div>}
                 {loading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {[1,2,3,4].map(i => (
-                        <div key={i} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 h-80 animate-pulse">
-                            <div className="bg-slate-200 h-40 rounded-xl mb-4"></div>
-                            <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
-                            <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                        </div>
-                    ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[1,2,3,4].map(i => (<div key={i} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 h-80 animate-pulse"><div className="bg-slate-200 h-40 rounded-xl mb-4"></div><div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div></div>))}
                     </div>
                 ) : cars.length === 0 ? (
                     <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4"><Search size={40} className="text-slate-300"/></div>
                     <h3 className="text-xl font-bold text-slate-900 mb-2">Unit Tidak Ditemukan</h3>
-                    <p className="text-slate-500 max-w-md mx-auto mb-6">Tidak ada unit tersedia di <strong>{dpcRegions.find(r => r.id === selectedDpc)?.name || 'Wilayah Ini'}</strong> pada tanggal yang dipilih.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -435,24 +422,22 @@ export const MarketplacePage: React.FC = () => {
               </>
           )}
 
-          {/* TAB 2: INCOMING REQUESTS (New) */}
+          {/* TAB 2: INCOMING REQUESTS (Supplier) */}
           {activeMainTab === 'r2r_incoming' && (
               <div className="animate-in fade-in">
                   <div className="flex items-center gap-3 mb-6">
                       <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Clock size={24}/></div>
                       <div>
                           <h3 className="text-xl font-bold text-slate-900">Pesanan Masuk (Rent-to-Rent)</h3>
-                          <p className="text-slate-500 text-sm">Anda punya waktu 60 menit untuk merespon pengajuan sewa dari rekanan.</p>
+                          <p className="text-slate-500 text-sm">Permintaan sewa dari rental lain. Terima untuk proses booking.</p>
                       </div>
                   </div>
 
-                  {loadingIncoming ? (
-                      <div className="text-center py-12"><i className="fas fa-spinner fa-spin text-slate-400"></i> Loading requests...</div>
+                  {loadingList ? (
+                      <div className="text-center py-12"><i className="fas fa-spinner fa-spin text-slate-400"></i> Loading...</div>
                   ) : incomingRequests.length === 0 ? (
                       <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-200">
-                          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400"><ShoppingBag size={24}/></div>
                           <h4 className="font-bold text-slate-700 mb-1">Belum ada pesanan masuk</h4>
-                          <p className="text-slate-500 text-sm">Pesanan dari rental lain akan muncul di sini.</p>
                       </div>
                   ) : (
                       <div className="space-y-4">
@@ -462,25 +447,18 @@ export const MarketplacePage: React.FC = () => {
                               
                               return (
                                   <div key={req.id} className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-6 relative overflow-hidden group">
-                                      {/* Left Border Status Indicator */}
-                                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500"></div>
+                                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${req.status === 'approved' ? 'bg-green-500' : req.status === 'rejected' ? 'bg-red-500' : 'bg-orange-500'}`}></div>
                                       
-                                      {/* Car Thumb */}
                                       <div className="w-full md:w-32 h-24 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
-                                          {car?.image_url ? (
-                                              <img src={car.image_url} className="w-full h-full object-cover" />
-                                          ) : (
-                                              <div className="w-full h-full flex items-center justify-center text-slate-400"><CarIcon size={24}/></div>
-                                          )}
+                                          {car?.image_url ? (<img src={car.image_url} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><CarIcon size={24}/></div>)}
                                       </div>
 
-                                      {/* Details */}
                                       <div className="flex-1 space-y-2 w-full">
                                           <div className="flex justify-between items-start">
                                               <div>
-                                                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pemohon (R2R Partner)</div>
+                                                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pemohon</div>
                                                   <h4 className="font-bold text-slate-900 text-lg">{requester?.name || 'Unknown Rental'}</h4>
-                                                  <p className="text-xs text-slate-500 flex items-center gap-1"><User size={10}/> {requester?.owner_name}</p>
+                                                  <p className="text-xs text-slate-500">{requester?.owner_name}</p>
                                               </div>
                                               <div className="text-right">
                                                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Total Penawaran</div>
@@ -497,32 +475,86 @@ export const MarketplacePage: React.FC = () => {
                                                   <CarIcon size={14} className="text-slate-400"/>
                                                   <span>{car?.brand} {car?.model}</span>
                                               </div>
-                                              {req.driver_id && (
-                                                  <div className="flex items-center gap-2 text-green-700 font-medium">
-                                                      <UserCheck size={14}/>
-                                                      <span>Plus Driver</span>
-                                                  </div>
-                                              )}
                                           </div>
                                       </div>
 
-                                      {/* Action & Timer */}
                                       <div className="flex flex-col items-center gap-3 min-w-[140px]">
-                                          <div className="text-xs text-slate-500 font-medium flex flex-col items-center">
-                                              <span>Sisa Waktu Konfirmasi</span>
-                                              <div className="bg-slate-100 px-3 py-1 rounded-full mt-1 border border-slate-200">
-                                                  <CountdownTimer createdAt={req.created_at} />
+                                          <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${req.status === 'approved' ? 'bg-green-100 text-green-700' : req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                              {req.status}
+                                          </span>
+                                          
+                                          {req.status === 'pending' && (
+                                              <div className="flex gap-2 w-full">
+                                                  <button onClick={() => handleRejectRequest(req.id)} className="flex-1 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-bold text-xs">Tolak</button>
+                                                  <button onClick={() => handleProcessOrder(req)} className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-xs shadow-md">Proses Order</button>
+                                              </div>
+                                          )}
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  )}
+              </div>
+          )}
+
+          {/* TAB 3: OUTGOING REQUESTS (Renter) */}
+          {activeMainTab === 'r2r_outgoing' && (
+              <div className="animate-in fade-in">
+                  <div className="flex items-center gap-3 mb-6">
+                      <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><ShoppingBag size={24}/></div>
+                      <div>
+                          <h3 className="text-xl font-bold text-slate-900">Status Order Saya</h3>
+                          <p className="text-slate-500 text-sm">Daftar permintaan sewa unit ke rental lain.</p>
+                      </div>
+                  </div>
+
+                  {loadingList ? (
+                      <div className="text-center py-12"><i className="fas fa-spinner fa-spin text-slate-400"></i> Loading...</div>
+                  ) : outgoingRequests.length === 0 ? (
+                      <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-200">
+                          <h4 className="font-bold text-slate-700 mb-1">Belum ada order keluar</h4>
+                      </div>
+                  ) : (
+                      <div className="space-y-4">
+                          {outgoingRequests.map(req => {
+                              const supplier = (req as any).supplier;
+                              const car = req.cars as any;
+                              
+                              return (
+                                  <div key={req.id} className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-6">
+                                      <div className="w-full md:w-32 h-24 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
+                                          {car?.image_url ? (<img src={car.image_url} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><CarIcon size={24}/></div>)}
+                                      </div>
+
+                                      <div className="flex-1 space-y-2 w-full">
+                                          <div className="flex justify-between items-start">
+                                              <div>
+                                                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Supplier Unit</div>
+                                                  <h4 className="font-bold text-slate-900 text-lg">{supplier?.name || 'Unknown Rental'}</h4>
+                                              </div>
+                                              <div className="text-right">
+                                                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Total Biaya</div>
+                                                  <div className="font-bold text-blue-600 text-lg">Rp {req.total_price.toLocaleString('id-ID')}</div>
                                               </div>
                                           </div>
                                           
-                                          <div className="flex gap-2 w-full">
-                                              <button onClick={() => handleRejectRequest(req.id)} className="flex-1 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-bold text-xs">
-                                                  Tolak
-                                              </button>
-                                              <button onClick={() => handleApproveRequest(req)} className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold text-xs shadow-md">
-                                                  Terima
-                                              </button>
+                                          <div className="flex gap-4 text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                              <div className="flex items-center gap-2"><Calendar size={14} className="text-slate-400"/><span>{new Date(req.start_date).toLocaleDateString()}</span></div>
+                                              <div className="flex items-center gap-2"><CarIcon size={14} className="text-slate-400"/><span>{car?.brand} {car?.model}</span></div>
                                           </div>
+                                      </div>
+
+                                      <div className="flex flex-col items-center gap-3 min-w-[140px]">
+                                          <span className={`text-xs font-bold uppercase px-3 py-1.5 rounded-full ${req.status === 'approved' ? 'bg-green-100 text-green-700' : req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                              {req.status}
+                                          </span>
+                                          
+                                          {req.status === 'approved' && (
+                                              <button onClick={() => handleCreateCustomerInvoice(req)} className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-xs shadow-md flex items-center justify-center gap-2">
+                                                  <FileText size={14}/> Buat Invoice Pelanggan
+                                              </button>
+                                          )}
                                       </div>
                                   </div>
                               );
@@ -610,7 +642,7 @@ export const MarketplacePage: React.FC = () => {
                   {/* Modal Footer */}
                   {modalTab === 'details' && !showConfirmModal && (
                       <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-10 flex gap-3">
-                          <button onClick={handleBookingProcess} className="flex-1 bg-green-50 text-green-700 hover:bg-green-100 font-bold py-3 rounded-xl border border-green-200 flex items-center justify-center gap-2">
+                          <button onClick={() => handleManualWA(selectedCar)} className="flex-1 bg-green-50 text-green-700 hover:bg-green-100 font-bold py-3 rounded-xl border border-green-200 flex items-center justify-center gap-2">
                               <MessageCircle size={18}/> Tanya via WA
                           </button>
                           <button onClick={() => setShowConfirmModal(true)} className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2">

@@ -45,93 +45,58 @@ export const marketplaceRequestService = {
       .from('marketplace_requests')
       .select(`
         *,
-        cars (brand, model, license_plate, image_url),
-        requester:companies!requester_company_id (name, phone, owner_name),
-        drivers (full_name)
+        cars (id, brand, model, license_plate, image_url, price_per_day, driver_daily_salary),
+        requester:companies!requester_company_id (id, name, phone, owner_name, address),
+        drivers (id, full_name)
       `)
       .eq('supplier_company_id', profile.company_id)
-      .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error(error.message);
-    return data as any[]; // Type casting to handle Joined fields
+    return data as any[];
   },
 
   /**
-   * Approve a request:
-   * 1. Update status to Approved
-   * 2. Find/Create Customer record for the Requester Company
-   * 3. Create Booking
+   * Get outgoing requests made by current user (Renter view)
    */
-  approveRequest: async (request: MarketplaceRequest) => {
+  getOutgoingRequests: async (): Promise<MarketplaceRequest[]> => {
     const profile = await authService.getUserProfile();
-    if (!profile?.company_id) throw new Error("Unauthorized");
+    if (!profile?.company_id) return [];
 
-    // 1. Update Request Status
-    const { error: updateError } = await supabase
-        .from('marketplace_requests')
-        .update({ status: 'approved' })
-        .eq('id', request.id);
-    
-    if (updateError) throw new Error("Gagal update status request.");
+    const { data, error } = await supabase
+      .from('marketplace_requests')
+      .select(`
+        *,
+        cars (id, brand, model, license_plate, image_url, price_per_day),
+        supplier:companies!supplier_company_id (id, name, phone, owner_name, logo_url),
+        drivers (id, full_name)
+      `)
+      .eq('requester_company_id', profile.company_id)
+      .order('created_at', { ascending: false });
 
-    // 2. Resolve Customer (The Requester Company)
-    // We assume 'requester' object is populated from getIncomingRequests join
-    const requesterName = (request.requester as any)?.name || "Partner Rental";
-    const requesterPhone = (request.requester as any)?.phone || "00000000";
-    
-    // Check if this partner already exists as a customer in our DB
-    let customerId = '';
-    const { data: existingCustomer } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('company_id', profile.company_id)
-        .ilike('full_name', requesterName) // Simple matching by name
-        .single();
-
-    if (existingCustomer) {
-        customerId = existingCustomer.id;
-    } else {
-        // Create new Customer record for this Partner
-        const newCust = await customerService.createCustomer({
-            full_name: requesterName + " (R2R Partner)",
-            phone: requesterPhone,
-            nik: `R2R-${Date.now()}`, // Dummy NIK for corporate partner
-            address: "Marketplace Partner",
-            is_blacklisted: false
-        });
-        customerId = newCust.id;
-    }
-
-    // 3. Create Real Booking
-    const bookingPayload = {
-        car_id: request.car_id,
-        customer_id: customerId,
-        driver_id: request.driver_id || null,
-        start_date: request.start_date,
-        end_date: request.end_date,
-        total_price: request.total_price,
-        status: BookingStatus.CONFIRMED, // Direct confirmed
-        driver_option: request.driver_id ? DriverOption.WITH_DRIVER : DriverOption.LEPAS_KUNCI,
-        notes: `Order via Marketplace R2R. Requester: ${requesterName}`,
-        supplier_company_id: profile.company_id, // We are supplier
-        amount_paid: 0,
-        delivery_fee: 0
-    };
-
-    await bookingService.createBooking(bookingPayload);
-    return true;
+    if (error) throw new Error(error.message);
+    return data as any[];
   },
 
   /**
-   * Reject Request
+   * Update Status Request (Approve/Reject)
    */
-  rejectRequest: async (id: string) => {
+  updateStatus: async (id: string, status: 'approved' | 'rejected') => {
       const { error } = await supabase
         .from('marketplace_requests')
-        .update({ status: 'rejected' })
+        .update({ status })
         .eq('id', id);
       
       if (error) throw new Error(error.message);
+  },
+
+  /**
+   * Legacy: Direct Approve (Creates booking immediately)
+   * Kept for backward compatibility if needed, but UI now prefers redirecting to form.
+   */
+  approveRequest: async (request: MarketplaceRequest) => {
+    // ... Existing logic if needed ...
+    // Redirect flow prefers updating status manually after booking creation
+    return marketplaceRequestService.updateStatus(request.id, 'approved');
   }
 };

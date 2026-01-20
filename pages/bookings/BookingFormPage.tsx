@@ -8,6 +8,7 @@ import { customerService } from '../../service/customerService';
 import { driverService } from '../../service/driverService';
 import { highSeasonService } from '../../service/highSeasonService';
 import { blacklistService } from '../../service/blacklistService';
+import { marketplaceRequestService } from '../../service/marketplaceRequestService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { Car, Customer, Driver, BookingStatus, DriverOption, AppSettings, PaymentMethod, PayLaterTerm, HighSeason } from '../../types';
 import { Button } from '../../components/ui/Button';
@@ -82,6 +83,10 @@ export const BookingFormPage: React.FC = () => {
   // Existing Status - DEFAULT TO CONFIRMED (BOOKED)
   const [status, setStatus] = useState<BookingStatus>(BookingStatus.CONFIRMED);
 
+  // R2R Context
+  const [r2rRequest, setR2rRequest] = useState<any>(null);
+  const [r2rMode, setR2rMode] = useState<'supplier_process' | 'renter_create' | null>(null);
+
   // Init Data
   useEffect(() => {
     const init = async () => {
@@ -104,8 +109,11 @@ export const BookingFormPage: React.FC = () => {
             setRentalPackage(storedSettings.rentalPackages[0]);
         }
 
+        // Handle Navigation State from Marketplace or Calendar
         if (location.state && !isEditMode) {
             const s = location.state as any;
+            
+            // Standard Params
             if(s.carId) setSelectedCarId(s.carId);
             if(s.startDate) setStartDate(s.startDate);
             if(s.startTime) setStartTime(s.startTime);
@@ -113,6 +121,48 @@ export const BookingFormPage: React.FC = () => {
             if(s.endTime) setEndTime(s.endTime);
             if(s.withDriver !== undefined) setWithDriver(s.withDriver);
             if(s.coverageId) setDestination(s.coverageId);
+
+            // R2R Handling
+            if (s.r2rRequest) {
+                setR2rRequest(s.r2rRequest);
+                setR2rMode(s.mode);
+                const req = s.r2rRequest;
+                const reqStart = new Date(req.start_date);
+                const reqEnd = new Date(req.end_date);
+
+                setStartDate(reqStart.toISOString().split('T')[0]);
+                setStartTime(reqStart.toTimeString().slice(0,5));
+                setEndDate(reqEnd.toISOString().split('T')[0]);
+                setEndTime(reqEnd.toTimeString().slice(0,5));
+
+                if (s.mode === 'supplier_process') {
+                    // I am Supplier. Accepting order from Renter Company.
+                    setSelectedCarId(req.car_id); // My car
+                    setUnitPrice(req.total_price); // Assuming total price / days roughly? Or just use normal price
+                    setNotes(`Order via Marketplace R2R. Requester: ${req.requester?.name}`);
+                    setPaymentMethod(PaymentMethod.PAYLATER); // B2B usually Paylater/Transfer
+                    
+                    // Attempt to find customer record for the requester company
+                    const requesterName = req.requester?.name;
+                    const existingCust = cust.find((c: Customer) => c.full_name.toLowerCase().includes(requesterName.toLowerCase()));
+                    if (existingCust) {
+                        setSelectedCustomerId(existingCust.id);
+                    } else {
+                        // Pre-fill prompt for creating new customer
+                        // We can't auto-create here easily without disrupting flow, so we let user create or select "Non-Member"
+                        alert(`Info: Pelanggan '${requesterName}' belum ada di database Anda. Silakan buat data pelanggan baru untuk perusahaan ini.`);
+                    }
+                } else if (s.mode === 'renter_create') {
+                    // I am Renter. Creating invoice for my customer using Supplier's car.
+                    // Inject External Car into list so it can be selected
+                    const extCar = req.cars;
+                    // Add temporary car to list
+                    setCars(prev => [...prev, { ...extCar, is_external: true }]);
+                    setSelectedCarId(extCar.id);
+                    setNotes(`Unit R2R dari ${req.supplier?.name}.`);
+                    // Price is editable (selling price to end customer)
+                }
+            }
         }
 
       } catch (e) {
@@ -166,10 +216,7 @@ export const BookingFormPage: React.FC = () => {
                 }
                 
                 setStatus(booking.status);
-                
-                if (booking.payment_method) {
-                    setPaymentMethod(booking.payment_method);
-                }
+                if (booking.payment_method) setPaymentMethod(booking.payment_method);
 
             } catch (err) {
                 console.error(err);
@@ -186,59 +233,43 @@ export const BookingFormPage: React.FC = () => {
   useEffect(() => {
       const checkAvailability = async () => {
           if (!startDate || !endDate) return;
-          
           const start = `${startDate}T${startTime}:00`;
           const end = `${endDate}T${endTime}:00`;
-          
-          // Don't check if date range invalid
           if (new Date(end) <= new Date(start)) return;
 
           try {
-              // Pass current booking ID to exclude it from the check (if editing)
               const resources = await bookingService.getUnavailableResources(start, end, isEditMode ? id : undefined);
               setUnavailableCarIds(resources.carIds);
               setUnavailableDriverIds(resources.driverIds);
-          } catch (e) {
-              console.error("Availability check failed", e);
-          }
+          } catch (e) { console.error(e); }
       };
-
-      const timer = setTimeout(() => {
-          checkAvailability();
-      }, 500); // Debounce
-
+      const timer = setTimeout(checkAvailability, 500);
       return () => clearTimeout(timer);
   }, [startDate, startTime, endDate, endTime, isEditMode, id]);
 
   useEffect(() => {
-    if (selectedCarId) {
+    if (selectedCarId && r2rMode !== 'renter_create') {
+      // Only auto-update price if NOT creating invoice for end customer (renter mode allows manual price override)
       const car = cars.find(c => c.id === selectedCarId);
       if (car) setUnitPrice(car.price_per_day);
     }
-  }, [selectedCarId, cars]);
+  }, [selectedCarId, cars, r2rMode]);
 
   // Customer Selection & Blacklist Check
   useEffect(() => {
     const checkCustomer = async () => {
-        setGlobalBlacklistAlert(null); // Reset
+        setGlobalBlacklistAlert(null); 
         if (selectedCustomerId) {
             const cust = customers.find(c => c.id === selectedCustomerId);
             if (cust) {
                 setCustomerName(cust.full_name);
                 setCustomerPhone(cust.phone);
-                
-                // Real-time Global Blacklist Check
                 try {
                     const blacklistEntry = await blacklistService.checkBlacklistStatus(cust.nik, cust.phone);
                     if (blacklistEntry) {
-                        setGlobalBlacklistAlert({
-                            isBlacklisted: true,
-                            reason: blacklistEntry.reason
-                        });
+                        setGlobalBlacklistAlert({ isBlacklisted: true, reason: blacklistEntry.reason });
                     }
-                } catch (e) {
-                    console.error("Failed to check blacklist", e);
-                }
+                } catch (e) { console.error(e); }
             }
         }
     };
@@ -252,43 +283,29 @@ export const BookingFormPage: React.FC = () => {
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-    // High Season Calculation
     let highSeasonSurcharge = 0;
     if (highSeasons.length > 0) {
         let currentDate = new Date(start);
-        // Normalize time
         currentDate.setHours(0,0,0,0);
-        const endDateNormalized = new Date(end);
-        endDateNormalized.setHours(0,0,0,0);
-
-        // Iterate through each calendar day of the booking
         for (let i = 0; i < diffDays; i++) {
             const checkTime = currentDate.getTime();
-            // Find if this day falls in any high season
             const season = highSeasons.find(hs => {
                 const s = new Date(hs.startDate).setHours(0,0,0,0);
                 const e = new Date(hs.endDate).setHours(23,59,59,999);
                 return checkTime >= s && checkTime <= e;
             });
-
-            if (season) {
-                highSeasonSurcharge += season.priceIncrease;
-            }
-            // Move to next day
+            if (season) highSeasonSurcharge += season.priceIncrease;
             currentDate.setDate(currentDate.getDate() + 1);
         }
     }
 
     let areaRentSurcharge = 0;
     let areaDriverSurcharge = 0;
-    
     if (settings.coverageAreas) {
         const area = settings.coverageAreas.find(a => a.id === destination);
         if (area) {
             areaRentSurcharge = area.extraPrice;
-            if (withDriver) {
-                areaDriverSurcharge = area.extraDriverPrice;
-            }
+            if (withDriver) areaDriverSurcharge = area.extraDriverPrice;
         }
     }
 
@@ -306,23 +323,15 @@ export const BookingFormPage: React.FC = () => {
     const baseTotal = dailyTotal * diffDays;
     
     let overnightTotal = 0;
-    let nights = 0;
     if (withDriver && diffDays > 1) {
-        nights = diffDays - 1;
-        overnightTotal = nights * (settings.driverOvernightPrice || 150000);
+        overnightTotal = (diffDays - 1) * (settings.driverOvernightPrice || 150000);
     }
 
     const total = baseTotal + deliveryFee + overdueFee + extraFee + overnightTotal + highSeasonSurcharge;
-    return { total, nights, overnightTotal, driverBasePrice, highSeasonSurcharge };
+    return { total, overnightTotal, driverBasePrice, highSeasonSurcharge };
   };
 
-  const getAreaDetails = () => {
-      if (!settings.coverageAreas) return null;
-      return settings.coverageAreas.find(a => a.id === destination);
-  };
-
-  const { total: totalCost, nights, overnightTotal, driverBasePrice, highSeasonSurcharge } = calculateTotal();
-  const selectedArea = getAreaDetails();
+  const { total: totalCost, overnightTotal, driverBasePrice, highSeasonSurcharge } = calculateTotal();
 
   // Effect to auto-fill amount paid for PayLater
   useEffect(() => {
@@ -342,26 +351,14 @@ export const BookingFormPage: React.FC = () => {
         return;
     }
 
-    if (!selectedCarId) {
-       setError("Silakan pilih unit mobil.");
+    if (!selectedCarId || !selectedCustomerId) {
+       setError("Unit mobil dan pelanggan harus dipilih.");
        setLoading(false);
        return;
     }
-    
-    if (!selectedCustomerId) {
-        setError("Silakan pilih data pelanggan dari database.");
-        setLoading(false);
-        return;
-    }
 
     if (unavailableCarIds.includes(selectedCarId) && !isEditMode) {
-        setError("Mobil yang dipilih sudah terjadwal pada tanggal tersebut. Silakan pilih unit lain.");
-        setLoading(false);
-        return;
-    }
-
-    if (withDriver && selectedDriverId && unavailableDriverIds.includes(selectedDriverId) && !isEditMode) {
-        setError("Driver yang dipilih sudah terjadwal. Silakan pilih driver lain.");
+        setError("Mobil yang dipilih sudah terjadwal pada tanggal tersebut.");
         setLoading(false);
         return;
     }
@@ -378,28 +375,22 @@ export const BookingFormPage: React.FC = () => {
         start_date: `${startDate}T${startTime}:00`,
         end_date: `${endDate}T${endTime}:00`,
         driver_option: withDriver ? DriverOption.WITH_DRIVER : DriverOption.LEPAS_KUNCI,
-        
         total_price: totalCost,
         delivery_fee: deliveryFee,
         amount_paid: amountPaid,
-        
         rental_package: rentalPackage,
         destination: destination,
         notes: notes,
-        
         deposit_type: depositType,
         deposit_description: depositDesc,
         deposit_value: depositValue,
         deposit_image_url: depositImage || undefined,
-        
-        // Use current status (defaults to CONFIRMED for new, or existing status for edit)
         status: status,
         overdue_fee: overdueFee,
         extra_fee: extraFee,
         extra_fee_reason: extraFeeReason,
         actual_return_date: actualReturnDate,
         payment_method: paymentMethod,
-        
         paylater_term: paymentMethod === PaymentMethod.PAYLATER ? payLaterTerm : undefined
     };
 
@@ -408,6 +399,11 @@ export const BookingFormPage: React.FC = () => {
           await bookingService.updateBooking(id, payload);
       } else {
           await bookingService.createBooking(payload as any);
+          
+          // R2R Logic: If creating based on supplier request, update status
+          if (r2rMode === 'supplier_process' && r2rRequest) {
+              await marketplaceRequestService.updateStatus(r2rRequest.id, 'approved');
+          }
       }
       navigate('/dashboard/bookings');
     } catch (err: any) {
@@ -417,9 +413,7 @@ export const BookingFormPage: React.FC = () => {
     }
   };
   
-  if (initialLoading) {
-      return <div className="p-12 text-center text-slate-500"><i className="fas fa-spinner fa-spin mr-2"></i> Memuat data transaksi...</div>;
-  }
+  if (initialLoading) return <div className="p-12 text-center text-slate-500">Memuat...</div>;
 
   const duration = Math.ceil(Math.abs(new Date(`${endDate}T${endTime}`).getTime() - new Date(`${startDate}T${startTime}`).getTime()) / (1000*3600*24)) || 1;
   const paymentStatus = amountPaid >= totalCost ? 'LUNAS' : 'BELUM LUNAS';
@@ -428,7 +422,11 @@ export const BookingFormPage: React.FC = () => {
     <div className="max-w-7xl mx-auto pb-32">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">{isEditMode ? 'Edit Data Transaksi' : 'Buat Booking Baru'}</h1>
-        <p className="text-slate-500 text-sm">Status awal otomatis <strong>BOOKED</strong>.</p>
+        {r2rMode && (
+            <div className="mt-2 inline-block bg-indigo-100 text-indigo-700 px-3 py-1 rounded text-sm font-bold border border-indigo-200">
+                Mode: {r2rMode === 'supplier_process' ? 'Proses Order Masuk (Supplier)' : 'Buat Invoice Pelanggan (Renter)'}
+            </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -436,12 +434,10 @@ export const BookingFormPage: React.FC = () => {
           
           {/* LEFT COLUMN (Unit & Time) */}
           <div className="lg:col-span-5 space-y-6">
-            {/* SECTION 1: WAKTU & UNIT */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                  <Clock className="text-blue-600" size={16}/> Waktu & Unit
                </h3>
-               {/* Date Inputs */}
                <div className="space-y-4">
                  <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mulai Sewa</label>
@@ -464,13 +460,14 @@ export const BookingFormPage: React.FC = () => {
                         value={selectedCarId} 
                         onChange={e => setSelectedCarId(e.target.value)} 
                         required
+                        disabled={r2rMode === 'supplier_process' || r2rMode === 'renter_create'} // Locked in R2R mode
                     >
                         <option value="">-- Pilih unit armada --</option>
                         {cars.map(c => {
                             const isUnavailable = unavailableCarIds.includes(c.id);
                             return (
                                 <option key={c.id} value={c.id} disabled={isUnavailable}>
-                                    {isUnavailable ? '[TERPAKAI] ' : ''}{c.brand} {c.model} - {c.license_plate}
+                                    {isUnavailable ? '[TERPAKAI] ' : ''}{c.brand} {c.model} - {c.license_plate} {(c as any).is_external ? '(R2R Unit)' : ''}
                                 </option>
                             );
                         })}
@@ -485,7 +482,6 @@ export const BookingFormPage: React.FC = () => {
                              {withDriver && driverBasePrice > 0 && <span className="text-[10px] text-green-600">+ Rp {driverBasePrice.toLocaleString('id-ID')} / hari</span>}
                          </div>
                      </label>
-                     {/* DRIVER SELECTION DROPDOWN */}
                      {withDriver && (
                          <div className="mt-3 pl-8 animate-in fade-in slide-in-from-top-1">
                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><UserIcon size={10}/> Pilih Driver (Opsional)</label>
@@ -504,14 +500,12 @@ export const BookingFormPage: React.FC = () => {
                                      );
                                  })}
                              </select>
-                             {unavailableDriverIds.includes(selectedDriverId) && <p className="text-xs text-red-500 mt-1">Driver ini sudah ada jadwal lain.</p>}
                          </div>
                      )}
                  </div>
                </div>
             </div>
 
-            {/* SECTION: JAMINAN */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">Jaminan</h3>
                <div className="flex bg-slate-100 p-1 rounded-lg mb-4">
@@ -529,23 +523,17 @@ export const BookingFormPage: React.FC = () => {
           {/* RIGHT COLUMN */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* SECTION 2: DATA PELANGGAN */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 relative">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2">1. Data Pelanggan & Tujuan</h3>
                
-               {/* GLOBAL BLACKLIST ALERT */}
                {globalBlacklistAlert && (
                    <div className="bg-red-50 border-l-4 border-red-600 p-4 mb-4 animate-in slide-in-from-top-2 rounded-r-lg">
                        <div className="flex items-start gap-3">
                            <ShieldAlert size={24} className="text-red-600 mt-0.5"/>
                            <div>
                                <h3 className="text-red-800 font-bold text-sm uppercase">PERINGATAN: PELANGGAN BLACKLIST</h3>
-                               <p className="text-red-700 text-sm mt-1">
-                                   Pelanggan ini terdaftar di Global Blacklist ASPERDA. Transaksi tidak dapat dilanjutkan.
-                               </p>
-                               <p className="text-red-600 text-xs mt-1 font-mono bg-red-100 p-1 rounded">
-                                   Alasan: {globalBlacklistAlert.reason}
-                               </p>
+                               <p className="text-red-700 text-sm mt-1">Pelanggan ini terdaftar di Global Blacklist ASPERDA.</p>
+                               <p className="text-red-600 text-xs mt-1 font-mono bg-red-100 p-1 rounded">Alasan: {globalBlacklistAlert.reason}</p>
                            </div>
                        </div>
                    </div>
@@ -562,15 +550,16 @@ export const BookingFormPage: React.FC = () => {
                               </option>
                           ))}
                       </select>
+                      {r2rMode === 'supplier_process' && !selectedCustomerId && (
+                          <div className="text-xs text-orange-600 mt-1">
+                              *Pelanggan '{r2rRequest?.requester?.name}' tidak ditemukan. Mohon buat data pelanggan baru terlebih dahulu.
+                              <Link to="/dashboard/customers/new" target="_blank" className="font-bold underline ml-1">Buat Disini</Link>
+                          </div>
+                      )}
                   </div>
                   <div className="sm:col-span-2 md:col-span-1">
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nomor WhatsApp</label>
-                      <input 
-                        className="w-full border rounded-lg p-2.5 text-sm bg-slate-50 font-mono text-slate-700" 
-                        value={customerPhone} 
-                        readOnly
-                        placeholder="Pilih Pelanggan..."
-                      />
+                      <input className="w-full border rounded-lg p-2.5 text-sm bg-slate-50 font-mono text-slate-700" value={customerPhone} readOnly placeholder="Pilih Pelanggan..." />
                   </div>
                   <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Wilayah Tujuan</label>
@@ -588,7 +577,6 @@ export const BookingFormPage: React.FC = () => {
                </div>
             </div>
 
-            {/* SECTION 3: BIAYA */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2">2. Summary & Biaya</h3>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -607,19 +595,9 @@ export const BookingFormPage: React.FC = () => {
                            <h4 className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2">Rincian Sewa ({duration} Hari)</h4>
                            <div className="flex justify-between text-sm mb-1"><span>Sewa Unit</span><span>Rp {(unitPrice * duration).toLocaleString('id-ID')}</span></div>
                            {withDriver && driverBasePrice > 0 && <div className="flex justify-between text-sm mb-1 text-green-200"><span>Driver</span><span>Rp {(driverBasePrice * duration).toLocaleString('id-ID')}</span></div>}
-                           {selectedArea && <div className="flex justify-between text-sm mb-1 text-yellow-200"><span>Surcharge Area</span><span>Rp {((selectedArea.extraPrice + (withDriver ? selectedArea.extraDriverPrice : 0)) * duration).toLocaleString('id-ID')}</span></div>}
                            {overnightTotal > 0 && <div className="flex justify-between text-sm mb-1 text-pink-200"><span>Inap Driver</span><span>Rp {overnightTotal.toLocaleString('id-ID')}</span></div>}
-                           
-                           {/* High Season Rincian */}
-                           {highSeasonSurcharge > 0 && (
-                               <div className="flex justify-between text-sm mb-1 text-orange-300 font-bold bg-orange-900/20 px-1 rounded">
-                                   <span className="flex items-center gap-1"><Calendar size={12}/> High Season</span>
-                                   <span>Rp {highSeasonSurcharge.toLocaleString('id-ID')}</span>
-                               </div>
-                           )}
-
+                           {highSeasonSurcharge > 0 && <div className="flex justify-between text-sm mb-1 text-orange-300 font-bold"><span className="flex items-center gap-1"><Calendar size={12}/> High Season</span><span>Rp {highSeasonSurcharge.toLocaleString('id-ID')}</span></div>}
                            {deliveryFee > 0 && <div className="flex justify-between text-sm mb-1"><span>Antar/Jemput</span><span>Rp {deliveryFee.toLocaleString('id-ID')}</span></div>}
-                           
                            {overdueFee > 0 && <div className="flex justify-between text-sm mb-1 text-red-200"><span>Overdue</span><span>Rp {overdueFee.toLocaleString('id-ID')}</span></div>}
                            {extraFee > 0 && <div className="flex justify-between text-sm mb-1 text-red-200"><span>Biaya Extra</span><span>Rp {extraFee.toLocaleString('id-ID')}</span></div>}
                        </div>
@@ -628,7 +606,6 @@ export const BookingFormPage: React.FC = () => {
                </div>
             </div>
 
-            {/* SECTION 4: PEMBAYARAN */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
                  <Wallet className="text-blue-600" size={16}/> 3. Metode Pembayaran
@@ -642,13 +619,8 @@ export const BookingFormPage: React.FC = () => {
                            { id: PaymentMethod.QRIS, label: 'QRIS', icon: <QrCode size={18}/> },
                            { id: PaymentMethod.PAYLATER, label: 'PayLater', icon: <Clock size={18}/> }
                        ].map(method => (
-                           <div 
-                                key={method.id}
-                                onClick={() => setPaymentMethod(method.id)}
-                                className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all ${paymentMethod === method.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}
-                           >
-                               {method.icon}
-                               <span className="text-xs font-bold text-center">{method.label}</span>
+                           <div key={method.id} onClick={() => setPaymentMethod(method.id)} className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center justify-center gap-2 transition-all ${paymentMethod === method.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}>
+                               {method.icon}<span className="text-xs font-bold text-center">{method.label}</span>
                            </div>
                        ))}
                    </div>
@@ -660,11 +632,7 @@ export const BookingFormPage: React.FC = () => {
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                            <div>
                                <label className="block text-[10px] font-bold text-orange-700 uppercase mb-1">Tempo Pembayaran</label>
-                               <select 
-                                    className="w-full border border-orange-300 rounded-lg p-2.5 text-sm font-bold text-slate-700"
-                                    value={payLaterTerm}
-                                    onChange={e => setPayLaterTerm(Number(e.target.value) as PayLaterTerm)}
-                                >
+                               <select className="w-full border border-orange-300 rounded-lg p-2.5 text-sm font-bold text-slate-700" value={payLaterTerm} onChange={e => setPayLaterTerm(Number(e.target.value) as PayLaterTerm)}>
                                    <option value={1}>Bayar Nanti (1 Bulan / Lunas)</option>
                                    <option value={3}>Cicilan 3 Bulan</option>
                                    <option value={6}>Cicilan 6 Bulan</option>
@@ -673,123 +641,29 @@ export const BookingFormPage: React.FC = () => {
                            </div>
                            <div>
                                <label className="block text-[10px] font-bold text-orange-700 uppercase mb-1">Simulasi Cicilan (Per Bulan)</label>
-                               <div className="text-xl font-bold text-orange-900">
-                                   Rp {Math.ceil(totalCost / payLaterTerm).toLocaleString('id-ID')} 
-                                   <span className="text-xs font-normal text-orange-700 ml-1">/ bulan</span>
-                               </div>
-                               <p className="text-[10px] text-orange-600 mt-1">*Jatuh tempo setiap tanggal 1 bulan berjalan.</p>
+                               <div className="text-xl font-bold text-orange-900">Rp {Math.ceil(totalCost / payLaterTerm).toLocaleString('id-ID')} <span className="text-xs font-normal text-orange-700 ml-1">/ bulan</span></div>
                            </div>
-                       </div>
-                       <div className="mt-3 pt-3 border-t border-orange-200">
-                           <p className="text-xs text-orange-800 flex items-center gap-2">
-                               <CheckCircle size={14}/> Status transaksi ini akan otomatis tercatat <strong>LUNAS</strong> di pembukuan Rental. Tagihan akan masuk ke <strong>Pengurus DPC</strong>.
-                           </p>
                        </div>
                    </div>
                ) : (
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                        <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jumlah Dibayarkan (DP / Lunas)</label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-green-600 font-bold text-lg">Rp</span>
-                            <input 
-                                type="number" 
-                                className="w-full pl-10 border-2 border-green-100 rounded-lg p-3 text-2xl font-bold text-slate-800 bg-green-50/30 focus:ring-green-500 focus:border-green-500"
-                                value={amountPaid}
-                                onChange={e => setAmountPaid(Number(e.target.value))}
-                            />
-                          </div>
+                          <div className="relative"><span className="absolute left-3 top-2.5 text-green-600 font-bold text-lg">Rp</span><input type="number" className="w-full pl-10 border-2 border-green-100 rounded-lg p-3 text-2xl font-bold text-slate-800 bg-green-50/30 focus:ring-green-500 focus:border-green-500" value={amountPaid} onChange={e => setAmountPaid(Number(e.target.value))}/></div>
                        </div>
                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Status Pembayaran</label>
-                           <div className={`text-xl font-black uppercase tracking-wider py-1 px-4 rounded-lg inline-block ${paymentStatus === 'LUNAS' ? 'bg-green-200 text-green-800' : 'bg-slate-200 text-slate-600'}`}>
-                               {paymentStatus}
-                           </div>
-                           {amountPaid > 0 && amountPaid < totalCost && <p className="text-xs text-red-500 font-bold mt-2">Kurang: Rp {(totalCost - amountPaid).toLocaleString('id-ID')}</p>}
+                           <div className={`text-xl font-black uppercase tracking-wider py-1 px-4 rounded-lg inline-block ${paymentStatus === 'LUNAS' ? 'bg-green-200 text-green-800' : 'bg-slate-200 text-slate-600'}`}>{paymentStatus}</div>
                        </div>
                    </div>
                )}
             </div>
 
-            {/* SECTION 5: PENGEMBALIAN UNIT (Return) */}
-            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">
-                    <RotateCcw className="text-blue-600" size={16}/> 4. PENGEMBALIAN UNIT
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">TGL & JAM KEMBALI (AKTUAL)</label>
-                        <div className="flex gap-2">
-                            <input 
-                                type="date" 
-                                className="w-full border rounded-lg p-2.5 text-sm font-bold text-slate-700" 
-                                value={actualReturnDateStr} 
-                                onChange={e => setActualReturnDateStr(e.target.value)} 
-                            />
-                            <input 
-                                type="time" 
-                                className="w-24 border rounded-lg p-2.5 text-sm font-bold text-slate-700" 
-                                value={actualReturnTimeStr} 
-                                onChange={e => setActualReturnTimeStr(e.target.value)} 
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">BIAYA OVERDUE (AUTO/MANUAL)</label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">Rp</span>
-                            <input 
-                                type="number" 
-                                className="w-full pl-10 border rounded-lg p-2.5 text-sm font-bold text-slate-800"
-                                value={overdueFee} 
-                                onChange={e => setOverdueFee(Number(e.target.value))} 
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mb-4">
-                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">NOMINAL BIAYA EXTRA</label>
-                     <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">Rp</span>
-                        <input 
-                            type="number" 
-                            className="w-full pl-10 border rounded-lg p-2.5 text-sm font-bold text-slate-800"
-                            value={extraFee} 
-                            onChange={e => setExtraFee(Number(e.target.value))} 
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">KETERANGAN BIAYA EXTRA</label>
-                    <textarea 
-                        className="w-full border rounded-lg p-2.5 text-sm text-slate-700"
-                        rows={2}
-                        placeholder="Contoh: Unit kotor berlebih (cuci salon), bensin kurang 1 bar, baret ringan, dll"
-                        value={extraFeeReason}
-                        onChange={e => setExtraFeeReason(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            {/* ACTION BAR */}
             <div className="bg-slate-900 p-4 rounded-xl shadow-lg flex justify-between items-center fixed md:sticky bottom-4 md:bottom-6 left-4 right-4 md:left-auto md:right-auto z-40 safe-area-pb">
-                 <div className="text-white">
-                     <p className="text-xs opacity-70">Total Transaksi</p>
-                     <p className="text-lg md:text-xl font-bold">Rp {totalCost.toLocaleString('id-ID')}</p>
-                 </div>
+                 <div className="text-white"><p className="text-xs opacity-70">Total Transaksi</p><p className="text-lg md:text-xl font-bold">Rp {totalCost.toLocaleString('id-ID')}</p></div>
                  <div className="flex gap-3">
                      <Link to="/dashboard/bookings"><Button type="button" variant="secondary" className="bg-slate-700 hover:bg-slate-600 text-white border-none text-sm px-3 md:px-4">Batal</Button></Link>
-                     <Button 
-                        type="submit" 
-                        isLoading={loading} 
-                        className={`px-4 md:px-8 font-bold shadow-blue-900/50 shadow-lg text-sm ${globalBlacklistAlert ? 'bg-red-600 hover:bg-red-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
-                        disabled={!!globalBlacklistAlert}
-                     >
-                        {globalBlacklistAlert ? 'BLOKIR' : (isEditMode ? 'UPDATE' : 'SIMPAN')}
-                     </Button>
+                     <Button type="submit" isLoading={loading} className={`px-4 md:px-8 font-bold shadow-blue-900/50 shadow-lg text-sm ${globalBlacklistAlert ? 'bg-red-600 hover:bg-red-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`} disabled={!!globalBlacklistAlert}>{globalBlacklistAlert ? 'BLOKIR' : (isEditMode ? 'UPDATE' : 'SIMPAN')}</Button>
                  </div>
             </div>
 
