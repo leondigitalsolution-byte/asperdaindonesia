@@ -9,6 +9,7 @@ import { CarStatus, Transmission, CarOwnerType, Partner, MaintenanceRecord, Main
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { ImageUploader } from '../../components/ImageUploader';
+import { compressImage } from '../../utils/imageCompression'; // Import Utility
 import { Wrench, Zap, Fuel, Gauge, MapPin, DollarSign, Info, Package, User, Globe, Calendar, Image as ImageIcon, History } from 'lucide-react';
 
 const MAINTENANCE_LABELS: Record<MaintenanceType, string> = {
@@ -81,6 +82,7 @@ export const CarFormPage: React.FC = () => {
   // Image Main
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false); // UI State
 
   // Gallery State
   const [gallery, setGallery] = useState<CarGallery>({});
@@ -192,15 +194,27 @@ export const CarFormPage: React.FC = () => {
       }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Modified to include Compression
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      setIsProcessingImage(true);
+      try {
+          const file = e.target.files[0];
+          // COMPRESS HERE
+          const compressed = await compressImage(file);
+          setImageFile(compressed);
+          setPreviewUrl(URL.createObjectURL(compressed));
+      } catch (e) {
+          console.error("Compression error", e);
+      } finally {
+          setIsProcessingImage(false);
+      }
     }
   };
 
-  // Gallery Image Handler
+  // Gallery Image Handler (ImageUploader now handles compression, we just convert DataURL back to File for upload if needed, OR carService.uploadCarImage needs to handle Blob)
+  // carService expects a File. fetch(dataUrl).blob() works fine.
+  // Note: Since ImageUploader now compresses BEFORE generating DataURL, the DataURL represents the compressed image.
   const handleGalleryUpload = async (key: keyof CarGallery, dataUrl: string | null) => {
       if (!dataUrl) {
           setGallery(prev => ({ ...prev, [key]: undefined }));
@@ -379,7 +393,7 @@ export const CarFormPage: React.FC = () => {
                     <div className="flex justify-center mb-6">
                         <div className="w-full">
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Foto Utama (Thumbnail Tampak Depan Serong)</label>
-                        <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:bg-slate-50 transition-colors relative">
+                        <div className={`border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:bg-slate-50 transition-colors relative ${isProcessingImage ? 'opacity-50 cursor-wait' : ''}`}>
                             {previewUrl ? (
                             <div className="relative h-48 w-full">
                                 <img src={previewUrl} alt="Preview" className="w-full h-full object-contain rounded-lg" />
@@ -393,9 +407,18 @@ export const CarFormPage: React.FC = () => {
                             </div>
                             ) : (
                             <div className="py-8">
-                                <i className="fas fa-cloud-upload-alt text-4xl text-slate-300 mb-2"></i>
-                                <p className="text-slate-500 text-sm">Klik untuk upload foto</p>
-                                <p className="text-xs text-slate-400 mt-1">PNG, JPG (Max 2MB)</p>
+                                {isProcessingImage ? (
+                                    <div className="flex flex-col items-center">
+                                        <i className="fas fa-spinner fa-spin text-2xl mb-2 text-indigo-500"></i>
+                                        <p className="text-sm font-medium text-indigo-500">Mengompres Gambar...</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-cloud-upload-alt text-4xl text-slate-300 mb-2"></i>
+                                        <p className="text-slate-500 text-sm">Klik untuk upload foto</p>
+                                        <p className="text-xs text-slate-400 mt-1">PNG, JPG (Max 2MB)</p>
+                                    </>
+                                )}
                             </div>
                             )}
                             <input 
@@ -403,7 +426,7 @@ export const CarFormPage: React.FC = () => {
                             accept="image/*"
                             onChange={handleFileChange}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            disabled={!!previewUrl}
+                            disabled={!!previewUrl || isProcessingImage}
                             />
                         </div>
                         </div>
