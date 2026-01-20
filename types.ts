@@ -82,6 +82,28 @@ export enum VerificationStatus {
   BLACKLISTED = 'blacklisted'
 }
 
+// --- R2R MARKETPLACE TYPES ---
+export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export interface MarketplaceRequest {
+  id: string;
+  requester_company_id: string;
+  supplier_company_id: string;
+  car_id: string;
+  driver_id?: string;
+  start_date: string;
+  end_date: string;
+  total_price: number;
+  status: RequestStatus;
+  created_at: string;
+  
+  // Joins
+  cars?: Car;
+  requester?: Company; // Joined from companies table
+  drivers?: Driver;
+}
+// -----------------------------
+
 export type PayLaterTerm = 1 | 3 | 6 | 12;
 
 export interface PayLaterRecord {
