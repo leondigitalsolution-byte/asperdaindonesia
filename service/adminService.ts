@@ -84,12 +84,12 @@ export const adminService = {
   },
 
   /**
-   * Update Member Compliance (Verification & Rating)
+   * Update Member Verification Status (Only allows changing verification status)
    */
-  updateMemberCompliance: async (companyId: string, updates: { verification_status?: string, kpi_rating?: number }) => {
+  updateMemberCompliance: async (companyId: string, updates: { verification_status: string }) => {
       const { error } = await supabase
         .from('companies')
-        .update(updates)
+        .update({ verification_status: updates.verification_status })
         .eq('id', companyId);
       
       if (error) throw new Error(error.message);

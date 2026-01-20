@@ -372,12 +372,8 @@ export const SettingsPage: React.FC = () => {
                                 <span className="text-xs text-slate-500">Status verifikasi oleh Admin Pusat/DPC</span>
                             </div>
                             
-                            {/* KPI Stats */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
-                                    <div className="text-xs text-slate-500 uppercase font-bold">Rating</div>
-                                    <div className="text-xl font-bold text-blue-600">{currentCompany?.kpi_rating || 5.0} ⭐</div>
-                                </div>
+                            {/* KPI Stats (RATING REMOVED AS REQUESTED) */}
+                            <div className="grid grid-cols-1 gap-4">
                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
                                     <div className="text-xs text-slate-500 uppercase font-bold">Success Rate</div>
                                     <div className="text-xl font-bold text-green-600">{currentCompany?.kpi_order_success_ratio || 100}%</div>

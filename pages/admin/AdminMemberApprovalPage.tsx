@@ -52,15 +52,6 @@ export const AdminMemberApprovalPage: React.FC = () => {
   };
 
   // --- ACTIONS FOR ACTIVE ---
-  const handleUpdateRating = async (id: string, newRating: number) => {
-      try {
-          await adminService.updateMemberCompliance(id, { kpi_rating: newRating });
-          setActiveMembers(prev => prev.map(m => m.id === id ? { ...m, kpi_rating: newRating } : m));
-      } catch (e: any) {
-          alert("Gagal update rating: " + e.message);
-      }
-  };
-
   const handleToggleVerification = async (id: string, currentStatus: string) => {
       const newStatus = currentStatus === 'verified' ? 'unverified' : 'verified';
       if(!window.confirm(`Ubah status menjadi ${newStatus.toUpperCase()}?`)) return;
@@ -183,8 +174,8 @@ export const AdminMemberApprovalPage: React.FC = () => {
                         <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                             <tr>
                             <th className="px-6 py-4">Rental & Owner</th>
-                            <th className="px-6 py-4 text-center">Verifikasi</th>
-                            <th className="px-6 py-4 text-center">Rating (KPI)</th>
+                            <th className="px-6 py-4 text-center">Status Verifikasi</th>
+                            <th className="px-6 py-4 text-center">Rating (Customer)</th>
                             <th className="px-6 py-4">Statistik</th>
                             </tr>
                         </thead>
@@ -203,27 +194,18 @@ export const AdminMemberApprovalPage: React.FC = () => {
                                             ? 'bg-green-100 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' 
                                             : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-green-50 hover:text-green-600 hover:border-green-200'
                                         }`}
-                                        title="Klik untuk ubah status"
+                                        title="Klik untuk ubah status verifikasi"
                                     >
                                         {m.verification_status === 'verified' ? <ShieldCheck size={14}/> : <AlertCircle size={14}/>}
                                         {m.verification_status === 'verified' ? 'VERIFIED' : 'UNVERIFIED'}
                                     </button>
                                 </td>
                                 <td className="px-6 py-4 text-center">
-                                    <div className="flex items-center justify-center gap-1 group">
-                                        <Star className="text-amber-400 fill-amber-400" size={16}/>
-                                        <select 
-                                            className="font-bold text-slate-700 bg-transparent border-none focus:ring-0 cursor-pointer p-0 w-10 text-center"
-                                            value={m.kpi_rating || 5.0}
-                                            onChange={(e) => handleUpdateRating(m.id, Number(e.target.value))}
-                                        >
-                                            <option value="1">1.0</option>
-                                            <option value="2">2.0</option>
-                                            <option value="3">3.0</option>
-                                            <option value="4">4.0</option>
-                                            <option value="5">5.0</option>
-                                        </select>
+                                    <div className="flex items-center justify-center gap-1 text-amber-500 font-bold">
+                                        <Star className="fill-amber-500" size={16}/>
+                                        {m.kpi_rating ? Number(m.kpi_rating).toFixed(1) : '0.0'}
                                     </div>
+                                    <div className="text-[10px] text-slate-400 mt-0.5">By Customers</div>
                                 </td>
                                 <td className="px-6 py-4 text-xs text-slate-500">
                                     <div>Success Rate: <span className="font-bold text-green-600">{m.kpi_order_success_ratio || 100}%</span></div>

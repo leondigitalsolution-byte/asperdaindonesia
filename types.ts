@@ -245,6 +245,7 @@ export interface Driver {
   dailyRate?: number;
   image_url?: string;
   rating?: number; // New Rating Field
+  review_count?: number; // New Review Count
   created_at?: string;
 }
 
@@ -294,6 +295,7 @@ export interface Car {
   stnk_expiry_date?: string;
   cleanliness_rating?: number;
   average_rating?: number;
+  review_count?: number; // New Review Count
   
   description?: string;
   gallery?: CarGallery;
@@ -381,6 +383,14 @@ export interface Review {
   rating: number;
   comment: string;
   created_at: string;
+}
+
+// Display interface for RPC `get_car_reviews`
+export interface ReviewDisplay {
+    reviewer_name: string;
+    rating: number;
+    comment: string;
+    created_at: string;
 }
 
 export interface DamageReport {
@@ -492,4 +502,15 @@ export interface CoopMember {
   dpc_id: string; 
   created_at?: string;
   dpc_regions?: DpcRegion;
+}
+
+export interface PublicReviewData {
+  booking_id: string;
+  customer_name: string;
+  car_brand: string;
+  car_model: string;
+  car_image?: string;
+  company_name: string;
+  company_logo?: string;
+  driver_name?: string; 
 }

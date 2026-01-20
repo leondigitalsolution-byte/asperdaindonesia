@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Car, BookingStatus, Driver } from '../types';
+import { Car, BookingStatus, Driver, ReviewDisplay } from '../types';
 
 export const marketplaceService = {
   /**
@@ -19,7 +19,6 @@ export const marketplaceService = {
   ): Promise<Car[]> => {
     
     // 1. Get List of BOOKED Car IDs in the requested range
-    // Logic: Find bookings that overlap with requested start/end
     const { data: busyBookings, error: busyError } = await supabase
         .from('bookings')
         .select('car_id')
@@ -31,7 +30,7 @@ export const marketplaceService = {
     
     const busyCarIds = busyBookings?.map(b => b.car_id) || [];
 
-    // 2. Query Cars
+    // 2. Query Cars (Include average_rating and review_count)
     let query = supabase
       .from('cars')
       .select(`
@@ -70,14 +69,10 @@ export const marketplaceService = {
         query = query.eq('category', filters.category);
     }
 
-    // Filter by Search Text (Brand/Model or Company Name)
+    // Filter by Search Text (Brand/Model)
     if (filters?.search) {
         const term = filters.search;
-        // Search in car brand/model OR company name (requires specific syntax in supabase js)
-        // Using 'or' with referenced tables is tricky in simple syntax. 
-        // For simplicity/performance, we filter by car brand/model here.
         query = query.ilike('brand', `%${term}%`); 
-        // Note: For advanced search across joined tables, usually needs a View or RPC.
     }
 
     const { data, error } = await query;
@@ -128,5 +123,14 @@ export const marketplaceService = {
           ...d,
           dailyRate: d.daily_rate // ensure mapping
       })) as Driver[];
+  },
+
+  /**
+   * Get reviews for a specific car using RPC
+   */
+  getCarReviews: async (carId: string): Promise<ReviewDisplay[]> => {
+      const { data, error } = await supabase.rpc('get_car_reviews', { p_car_id: carId });
+      if (error) throw new Error(error.message);
+      return data as ReviewDisplay[];
   }
 };

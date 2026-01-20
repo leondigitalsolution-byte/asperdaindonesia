@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Booking, BookingStatus, PaymentMethod, FinanceType, CarOwnerType } from '../types';
+import { Booking, BookingStatus, PaymentMethod, FinanceType, CarOwnerType, PublicReviewData } from '../types';
 import { authService } from './authService';
 import { payLaterService } from './payLaterService';
 import { financeService } from './financeService';
@@ -269,23 +269,23 @@ export const bookingService = {
 
   /**
    * Public: Get Booking by Review Token
-   * This is used by the public review page.
+   * Uses RPC to bypass RLS for joined tables (customers, cars, companies)
    */
-  getBookingByToken: async (token: string): Promise<Booking> => {
+  getBookingByToken: async (token: string): Promise<PublicReviewData> => {
     const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        id,
-        status,
-        customers (full_name),
-        cars (brand, model, image_url),
-        companies (name, logo_url)
-      `)
-      .eq('review_token', token)
-      .single();
+      .rpc('get_booking_by_review_token', { p_token: token });
 
-    if (error) throw new Error("Token review tidak valid atau kadaluarsa.");
-    return data as unknown as Booking;
+    if (error) {
+        console.error("RPC Error:", error);
+        throw new Error("Gagal mengambil data booking via token.");
+    }
+
+    // RPC returns an array of rows, we expect 1
+    if (!data || data.length === 0) {
+        throw new Error("Token review tidak valid atau kadaluarsa.");
+    }
+
+    return data[0] as PublicReviewData;
   },
 
   /**
@@ -321,6 +321,7 @@ export const bookingService = {
     delete payload.cars;
     delete payload.customers;
     delete payload.drivers;
+    delete payload.companies;
     delete payload.id;
     delete payload.company_id;
     delete payload.created_at;

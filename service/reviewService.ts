@@ -6,11 +6,12 @@ export const reviewService = {
    * Submit a review for a booking using the RPC function.
    * This transaction will insert the review AND invalidate the token atomically.
    */
-  submitPublicReview: async (token: string, rating: number, comment: string): Promise<boolean> => {
+  submitPublicReview: async (token: string, carRating: number, driverRating: number | null, comment: string): Promise<boolean> => {
     try {
       const { data, error } = await supabase.rpc('submit_public_review', {
         p_token: token,
-        p_rating: rating,
+        p_car_rating: carRating,
+        p_driver_rating: driverRating || 0, // 0 means no driver rated
         p_comment: comment
       });
 

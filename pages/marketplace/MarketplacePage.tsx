@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { marketplaceService } from '../../service/marketplaceService';
 import { authService } from '../../service/authService';
-import { Car, DpcRegion, Driver } from '../../types';
-import { Search, MapPin, Calendar, Building, Fuel, Settings, Zap, Star, UserCheck, X, Image as ImageIcon } from 'lucide-react';
+import { Car, DpcRegion, Driver, ReviewDisplay } from '../../types';
+import { Search, MapPin, Calendar, Building, Fuel, Settings, Zap, Star, UserCheck, X, Image as ImageIcon, MessageCircle, User } from 'lucide-react';
 
 export const MarketplacePage: React.FC = () => {
   const [cars, setCars] = useState<Car[]>([]);
@@ -32,6 +32,11 @@ export const MarketplacePage: React.FC = () => {
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [activeGalleryImage, setActiveGalleryImage] = useState<string | null>(null);
+  
+  // Reviews Tab State in Modal
+  const [modalTab, setModalTab] = useState<'details' | 'reviews'>('details');
+  const [reviews, setReviews] = useState<ReviewDisplay[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   // 1. Initial Load
   useEffect(() => {
@@ -88,6 +93,9 @@ export const MarketplacePage: React.FC = () => {
       setActiveGalleryImage(getCarImage(car)); // Set main image as initial
       setSelectedDriver(null);
       setAvailableDrivers([]);
+      setReviews([]);
+      setModalTab('details'); // Reset tab
+      
       setLoadingDrivers(true);
       
       // Load available drivers from same company
@@ -100,6 +108,26 @@ export const MarketplacePage: React.FC = () => {
           setLoadingDrivers(false);
       }
   };
+
+  const loadReviews = async () => {
+      if (!selectedCar) return;
+      setLoadingReviews(true);
+      try {
+          const data = await marketplaceService.getCarReviews(selectedCar.id);
+          setReviews(data);
+      } catch (e) {
+          console.error("Failed to load reviews", e);
+      } finally {
+          setLoadingReviews(false);
+      }
+  };
+
+  // Trigger load reviews when switching tab
+  useEffect(() => {
+      if (modalTab === 'reviews' && reviews.length === 0) {
+          loadReviews();
+      }
+  }, [modalTab]);
 
   const closeModal = () => {
       setSelectedCar(null);
@@ -139,10 +167,13 @@ export const MarketplacePage: React.FC = () => {
       return 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&q=80&w=400'; 
   };
 
-  const StarRating = ({ rating }: { rating: number }) => (
-      <div className="flex items-center gap-0.5">
-          <Star size={12} className="fill-amber-400 text-amber-400" />
-          <span className="text-xs font-bold text-slate-700">{rating || '5.0'}</span>
+  const StarRating = ({ rating, count }: { rating: number, count?: number }) => (
+      <div className="flex items-center gap-1">
+          <Star size={12} className={rating > 0 ? "fill-yellow-400 text-yellow-400" : "fill-slate-200 text-slate-300"} />
+          <span className="text-xs font-bold text-slate-700">{rating > 0 ? rating : '0'}</span>
+          {count !== undefined && (
+              <span className="text-[10px] text-slate-400">({count})</span>
+          )}
       </div>
   );
 
@@ -296,7 +327,7 @@ export const MarketplacePage: React.FC = () => {
                           {car.transmission}
                       </div>
                       <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded shadow-sm border border-white/50">
-                          <StarRating rating={car.average_rating || 5.0} />
+                          <StarRating rating={car.average_rating || 0} count={car.review_count || 0} />
                       </div>
                       {/* Gallery Indicator */}
                       {(car.gallery && Object.keys(car.gallery).filter(k => !!(car.gallery as any)[k]).length > 0) && (
@@ -379,114 +410,169 @@ export const MarketplacePage: React.FC = () => {
                       </button>
                   </div>
 
+                  {/* Modal Tabs */}
+                  <div className="flex border-b border-slate-100 bg-white">
+                      <button 
+                        onClick={() => setModalTab('details')}
+                        className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${modalTab === 'details' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                      >
+                          Informasi Unit
+                      </button>
+                      <button 
+                        onClick={() => setModalTab('reviews')}
+                        className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${modalTab === 'reviews' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                      >
+                          Ulasan ({selectedCar.review_count || 0})
+                      </button>
+                  </div>
+
                   {/* Modal Content - SCROLLABLE */}
                   <div className="p-0 overflow-y-auto flex-1">
                       
-                      {/* GALLERY SECTION */}
-                      <div className="bg-black relative aspect-video flex items-center justify-center overflow-hidden">
-                          <img 
-                            src={activeGalleryImage || getCarImage(selectedCar)} 
-                            className="w-full h-full object-contain"
-                            alt="Main View"
-                          />
-                      </div>
-                      
-                      {/* Thumbnails */}
-                      {selectedCar.gallery && (
-                          <div className="flex gap-2 p-2 overflow-x-auto bg-slate-900 scrollbar-hide">
-                              {/* Main Image Thumb */}
-                              <div 
-                                onClick={() => setActiveGalleryImage(getCarImage(selectedCar))}
-                                className={`w-20 h-14 flex-shrink-0 rounded overflow-hidden cursor-pointer border-2 ${activeGalleryImage === getCarImage(selectedCar) ? 'border-blue-500' : 'border-transparent'}`}
-                              >
-                                  <img src={getCarImage(selectedCar)} className="w-full h-full object-cover"/>
+                      {modalTab === 'details' && (
+                          <div className="animate-in fade-in">
+                              {/* GALLERY SECTION */}
+                              <div className="bg-black relative aspect-video flex items-center justify-center overflow-hidden">
+                                  <img 
+                                    src={activeGalleryImage || getCarImage(selectedCar)} 
+                                    className="w-full h-full object-contain"
+                                    alt="Main View"
+                                  />
                               </div>
-                              {/* Other Gallery Images */}
-                              {Object.values(selectedCar.gallery).filter(Boolean).map((url, idx) => (
-                                  <div 
-                                    key={idx}
-                                    onClick={() => setActiveGalleryImage(url!)}
-                                    className={`w-20 h-14 flex-shrink-0 rounded overflow-hidden cursor-pointer border-2 ${activeGalleryImage === url ? 'border-blue-500' : 'border-transparent'}`}
-                                  >
-                                      <img src={url!} className="w-full h-full object-cover"/>
+                              
+                              {/* Thumbnails */}
+                              {selectedCar.gallery && (
+                                  <div className="flex gap-2 p-2 overflow-x-auto bg-slate-900 scrollbar-hide">
+                                      {/* Main Image Thumb */}
+                                      <div 
+                                        onClick={() => setActiveGalleryImage(getCarImage(selectedCar))}
+                                        className={`w-20 h-14 flex-shrink-0 rounded overflow-hidden cursor-pointer border-2 ${activeGalleryImage === getCarImage(selectedCar) ? 'border-blue-500' : 'border-transparent'}`}
+                                      >
+                                          <img src={getCarImage(selectedCar)} className="w-full h-full object-cover"/>
+                                      </div>
+                                      {/* Other Gallery Images */}
+                                      {Object.values(selectedCar.gallery).filter(Boolean).map((url, idx) => (
+                                          <div 
+                                            key={idx}
+                                            onClick={() => setActiveGalleryImage(url!)}
+                                            className={`w-20 h-14 flex-shrink-0 rounded overflow-hidden cursor-pointer border-2 ${activeGalleryImage === url ? 'border-blue-500' : 'border-transparent'}`}
+                                          >
+                                              <img src={url!} className="w-full h-full object-cover"/>
+                                          </div>
+                                      ))}
                                   </div>
-                              ))}
+                              )}
+
+                              <div className="p-6 space-y-6">
+                                  {/* Description */}
+                                  {selectedCar.description && (
+                                      <div>
+                                          <h4 className="font-bold text-slate-800 mb-2 border-b pb-1 text-sm">Deskripsi & Fasilitas</h4>
+                                          <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{selectedCar.description}</p>
+                                      </div>
+                                  )}
+
+                                  {/* Driver Selection */}
+                                  <div>
+                                      <h4 className="text-sm font-bold text-slate-700 mb-2 border-b pb-1">Opsi Driver (Opsional)</h4>
+                                      {loadingDrivers ? (
+                                          <div className="p-4 text-center text-slate-500 text-sm"><i className="fas fa-spinner fa-spin mr-2"></i> Mencari driver available...</div>
+                                      ) : availableDrivers.length === 0 ? (
+                                          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center text-xs text-slate-500">
+                                              Tidak ada driver available dari rental ini untuk tanggal tersebut.
+                                          </div>
+                                      ) : (
+                                          <div className="space-y-2">
+                                              {availableDrivers.map(driver => (
+                                                  <div 
+                                                    key={driver.id} 
+                                                    onClick={() => setSelectedDriver(selectedDriver?.id === driver.id ? null : driver)}
+                                                    className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${selectedDriver?.id === driver.id ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
+                                                  >
+                                                      <div className="flex items-center gap-3">
+                                                          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
+                                                              {driver.image_url ? <img src={driver.image_url} className="w-full h-full object-cover"/> : <UserCheck className="w-full h-full p-2 text-slate-400"/>}
+                                                          </div>
+                                                          <div>
+                                                              <div className="font-bold text-sm text-slate-900">{driver.full_name}</div>
+                                                              <div className="flex items-center gap-2 mt-0.5">
+                                                                  <StarRating rating={driver.rating || 0} count={driver.review_count || 0}/>
+                                                                  <span className="text-[10px] text-slate-500">• {driver.dailyRate ? `Rp ${driver.dailyRate.toLocaleString()}/hari` : 'Harga Std'}</span>
+                                                              </div>
+                                                          </div>
+                                                      </div>
+                                                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedDriver?.id === driver.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>
+                                                          {selectedDriver?.id === driver.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                                      </div>
+                                                  </div>
+                                              ))}
+                                          </div>
+                                      )}
+                                  </div>
+
+                                  {/* Price Summary */}
+                                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
+                                      <div className="flex justify-between">
+                                          <span className="text-slate-500">Unit Mobil</span>
+                                          <span className="font-bold text-slate-900">Rp {selectedCar.price_per_day.toLocaleString()} /hari</span>
+                                      </div>
+                                      {selectedDriver && (
+                                          <div className="flex justify-between text-blue-700">
+                                              <span className="">+ Driver ({selectedDriver.full_name})</span>
+                                              <span className="font-bold">Rp {(selectedDriver.dailyRate || 150000).toLocaleString()} /hari</span>
+                                          </div>
+                                      )}
+                                  </div>
+                              </div>
                           </div>
                       )}
 
-                      <div className="p-6 space-y-6">
-                          {/* Description */}
-                          {selectedCar.description && (
-                              <div>
-                                  <h4 className="font-bold text-slate-800 mb-2 border-b pb-1 text-sm">Deskripsi & Fasilitas</h4>
-                                  <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{selectedCar.description}</p>
-                              </div>
-                          )}
-
-                          {/* Driver Selection */}
-                          <div>
-                              <h4 className="text-sm font-bold text-slate-700 mb-2 border-b pb-1">Opsi Driver (Opsional)</h4>
-                              {loadingDrivers ? (
-                                  <div className="p-4 text-center text-slate-500 text-sm"><i className="fas fa-spinner fa-spin mr-2"></i> Mencari driver available...</div>
-                              ) : availableDrivers.length === 0 ? (
-                                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center text-xs text-slate-500">
-                                      Tidak ada driver available dari rental ini untuk tanggal tersebut.
+                      {modalTab === 'reviews' && (
+                          <div className="p-6 animate-in fade-in">
+                              {loadingReviews ? (
+                                  <div className="text-center py-8 text-slate-500"><i className="fas fa-spinner fa-spin mr-2"></i> Memuat ulasan...</div>
+                              ) : reviews.length === 0 ? (
+                                  <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                      <MessageCircle className="mx-auto text-slate-300 mb-2" size={32}/>
+                                      <p className="text-slate-500 text-sm">Belum ada ulasan untuk mobil ini.</p>
                                   </div>
                               ) : (
-                                  <div className="space-y-2">
-                                      {availableDrivers.map(driver => (
-                                          <div 
-                                            key={driver.id} 
-                                            onClick={() => setSelectedDriver(selectedDriver?.id === driver.id ? null : driver)}
-                                            className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${selectedDriver?.id === driver.id ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
-                                          >
-                                              <div className="flex items-center gap-3">
-                                                  <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
-                                                      {driver.image_url ? <img src={driver.image_url} className="w-full h-full object-cover"/> : <UserCheck className="w-full h-full p-2 text-slate-400"/>}
-                                                  </div>
-                                                  <div>
-                                                      <div className="font-bold text-sm text-slate-900">{driver.full_name}</div>
-                                                      <div className="flex items-center gap-2 mt-0.5">
-                                                          <StarRating rating={driver.rating || 5.0} />
-                                                          <span className="text-[10px] text-slate-500">• {driver.dailyRate ? `Rp ${driver.dailyRate.toLocaleString()}/hari` : 'Harga Std'}</span>
+                                  <div className="space-y-4">
+                                      {reviews.map((rev, idx) => (
+                                          <div key={idx} className="border-b border-slate-100 pb-4 last:border-none">
+                                              <div className="flex justify-between items-start mb-1">
+                                                  <div className="flex items-center gap-2">
+                                                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                                                          <User size={16}/>
+                                                      </div>
+                                                      <div>
+                                                          <div className="text-sm font-bold text-slate-800">{rev.reviewer_name}</div>
+                                                          <StarRating rating={rev.rating} />
                                                       </div>
                                                   </div>
+                                                  <span className="text-[10px] text-slate-400">{new Date(rev.created_at).toLocaleDateString()}</span>
                                               </div>
-                                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedDriver?.id === driver.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>
-                                                  {selectedDriver?.id === driver.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
-                                              </div>
+                                              <p className="text-sm text-slate-600 pl-10 mt-1 italic">"{rev.comment}"</p>
                                           </div>
                                       ))}
                                   </div>
                               )}
                           </div>
-
-                          {/* Price Summary */}
-                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
-                              <div className="flex justify-between">
-                                  <span className="text-slate-500">Unit Mobil</span>
-                                  <span className="font-bold text-slate-900">Rp {selectedCar.price_per_day.toLocaleString()} /hari</span>
-                              </div>
-                              {selectedDriver && (
-                                  <div className="flex justify-between text-blue-700">
-                                      <span className="">+ Driver ({selectedDriver.full_name})</span>
-                                      <span className="font-bold">Rp {(selectedDriver.dailyRate || 150000).toLocaleString()} /hari</span>
-                                  </div>
-                              )}
-                          </div>
-                      </div>
+                      )}
                   </div>
 
                   {/* Modal Footer */}
-                  <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
-                      <button 
-                        onClick={handleBookingProcess}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"
-                      >
-                          <i className="fab fa-whatsapp text-lg"></i>
-                          Hubungi Pemilik & Pesan
-                      </button>
-                  </div>
+                  {modalTab === 'details' && (
+                      <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
+                          <button 
+                            onClick={handleBookingProcess}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                          >
+                              <i className="fab fa-whatsapp text-lg"></i>
+                              Hubungi Pemilik & Pesan
+                          </button>
+                      </div>
+                  )}
               </div>
           </div>
       )}
