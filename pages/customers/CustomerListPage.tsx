@@ -4,13 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { customerService } from '../../service/customerService';
 import { Customer } from '../../types';
+import { exportToCSV, processCSVImport, downloadCSVTemplate } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Edit2, Trash2, Search, Plus, Phone } from 'lucide-react';
+import { Edit2, Trash2, Search, Plus, Phone, Download, Import, FileText } from 'lucide-react';
 
 export const CustomerListPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -57,18 +59,74 @@ export const CustomerListPage: React.FC = () => {
     }
   };
 
+  const handleExport = () => {
+      exportToCSV(customers, 'Data_Pelanggan_ASPERDA');
+  };
+
+  const handleDownloadTemplate = () => {
+      const headers = ['Full_Name', 'NIK', 'Phone', 'Address'];
+      const example = ['Budi Santoso', '3578123456780001', '08123456789', 'Jl. Merdeka No 1, Jakarta'];
+      downloadCSVTemplate(headers, 'Template_Import_Pelanggan', example);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setImporting(true);
+          const file = e.target.files[0];
+          
+          processCSVImport(file, async (data) => {
+              try {
+                  let successCount = 0;
+                  for (const row of data) {
+                      if (row.Full_Name && row.Phone) {
+                          await customerService.createCustomer({
+                              full_name: row.Full_Name,
+                              nik: row.NIK ? String(row.NIK) : '',
+                              phone: row.Phone ? String(row.Phone) : '',
+                              address: row.Address || '-',
+                              is_blacklisted: false
+                          });
+                          successCount++;
+                      }
+                  }
+                  alert(`Berhasil import ${successCount} data pelanggan.`);
+                  fetchCustomers();
+              } catch (err: any) {
+                  alert("Import Gagal: " + err.message);
+              } finally {
+                  setImporting(false);
+                  e.target.value = '';
+              }
+          });
+      }
+  };
+
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Data Pelanggan</h1>
           <p className="text-slate-500 text-sm">Kelola database penyewa kendaraan Anda.</p>
         </div>
-        <Link to="/dashboard/customers/new">
-          <Button className="flex items-center gap-2">
-            <Plus size={18}/> Tambah Pelanggan
-          </Button>
-        </Link>
+        
+        <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+            <button onClick={handleDownloadTemplate} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <FileText size={14}/> Template CSV
+            </button>
+            <label className="cursor-pointer px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                {importing ? <i className="fas fa-spinner fa-spin"></i> : <Import size={14}/>}
+                <span>Import CSV</span>
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+            </label>
+            <button onClick={handleExport} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <Download size={14}/> Export
+            </button>
+            <Link to="/dashboard/customers/new">
+                <Button className="flex items-center gap-2 text-sm !w-auto">
+                    <Plus size={16}/> Tambah Pelanggan
+                </Button>
+            </Link>
+        </div>
       </div>
 
       {error && (

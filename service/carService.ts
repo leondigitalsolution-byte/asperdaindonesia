@@ -68,7 +68,11 @@ export const carService = {
         maintenance: carData.maintenance,
         gps_device_id: carData.gps_device_id,
         driver_daily_salary: carData.driver_daily_salary,
-        is_marketplace_ready: carData.is_marketplace_ready // New flag
+        is_marketplace_ready: carData.is_marketplace_ready,
+        stnk_expiry_date: carData.stnk_expiry_date,
+        
+        description: carData.description,
+        gallery: carData.gallery
       })
       .select()
       .single();

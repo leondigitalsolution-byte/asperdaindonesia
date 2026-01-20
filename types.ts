@@ -59,6 +59,29 @@ export enum PaymentMethod {
   PAYLATER = 'paylater'
 }
 
+// --- NEW COMPLIANCE TYPES ---
+export enum PayoutStatus {
+  UNPAID = 'unpaid',
+  PROCESSING = 'processing',
+  PAID = 'paid',
+  REFUNDED = 'refunded',
+  DISPUTED = 'disputed'
+}
+
+export enum DisputeStatus {
+  NONE = 'none',
+  OPEN = 'open',
+  RESOLVED_REFUND = 'resolved_refund',
+  RESOLVED_PAYOUT = 'resolved_payout'
+}
+
+export enum VerificationStatus {
+  UNVERIFIED = 'unverified',
+  PENDING = 'pending',
+  VERIFIED = 'verified',
+  BLACKLISTED = 'blacklisted'
+}
+
 export type PayLaterTerm = 1 | 3 | 6 | 12;
 
 export interface PayLaterRecord {
@@ -160,6 +183,14 @@ export interface Company {
   dpc_id: string;
   logo_url?: string;
   membership_status: MembershipStatus;
+  
+  // New Compliance Fields
+  verification_status?: VerificationStatus | string;
+  kpi_response_time_minutes?: number;
+  kpi_cancellation_rate?: number;
+  kpi_order_success_ratio?: number;
+  kpi_rating?: number;
+
   created_at?: string;
   dpc_regions?: DpcRegion;
 }
@@ -170,6 +201,11 @@ export interface Profile {
   email: string;
   role: UserRole;
   company_id?: string;
+  
+  // Consent
+  agreed_terms_version?: string;
+  agreed_at?: string;
+  
   created_at?: string;
 }
 
@@ -208,6 +244,7 @@ export interface Driver {
   status: 'active' | 'inactive' | 'on_duty';
   dailyRate?: number;
   image_url?: string;
+  rating?: number; // New Rating Field
   created_at?: string;
 }
 
@@ -217,6 +254,17 @@ export interface MaintenanceRecord {
   type: MaintenanceType;
   last_odometer: number;
   interval: number;
+}
+
+export interface CarGallery {
+    front?: string;
+    back?: string;
+    right?: string;
+    left?: string;
+    interior_dash?: string;
+    interior_seats?: string;
+    interior_trunk?: string;
+    detail_engine?: string;
 }
 
 export interface Car {
@@ -239,7 +287,17 @@ export interface Car {
   current_odometer?: number;
   maintenance?: MaintenanceRecord[];
   gps_device_id?: string;
-  is_marketplace_ready?: boolean; // NEW FIELD
+  
+  is_marketplace_ready?: boolean; 
+  
+  // New Compliance & Ratings & Gallery
+  stnk_expiry_date?: string;
+  cleanliness_rating?: number;
+  average_rating?: number;
+  
+  description?: string;
+  gallery?: CarGallery;
+
   created_at?: string;
   partners?: Partner;
   companies?: Company; // For Marketplace Join
@@ -297,10 +355,45 @@ export interface Booking {
   extra_fee?: number;
   extra_fee_reason?: string;
   payment_method?: PaymentMethod; 
+  
+  // New Marketplace & Compliance
+  supplier_company_id?: string;
+  commission_rate?: number;
+  commission_amount?: number;
+  payout_status?: PayoutStatus;
+  dispute_status?: DisputeStatus;
+  refund_status?: string;
+  insurance_claim_status?: string;
+
   created_at?: string;
   cars?: Car;
   customers?: Customer;
   drivers?: Driver; 
+}
+
+export interface DamageReport {
+  id: string;
+  booking_id: string;
+  company_id: string;
+  reported_at: string;
+  description: string;
+  evidence_photos: string[];
+  estimated_cost: number;
+  final_cost: number;
+  status: string;
+  created_at?: string;
+}
+
+export interface KycDocument {
+  id: string;
+  company_id: string;
+  document_type: string;
+  document_number?: string;
+  file_url: string;
+  status: string;
+  rejection_reason?: string;
+  uploaded_at: string;
+  verified_at?: string;
 }
 
 export interface FinanceRecord {

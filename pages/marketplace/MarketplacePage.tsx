@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { marketplaceService } from '../../service/marketplaceService';
 import { authService } from '../../service/authService';
-import { Car, DpcRegion } from '../../types';
-import { Search, MapPin, Calendar, Building, Fuel, Settings, Zap } from 'lucide-react';
+import { Car, DpcRegion, Driver } from '../../types';
+import { Search, MapPin, Calendar, Building, Fuel, Settings, Zap, Star, UserCheck, X, Image as ImageIcon } from 'lucide-react';
 
 export const MarketplacePage: React.FC = () => {
   const [cars, setCars] = useState<Car[]>([]);
@@ -25,6 +25,13 @@ export const MarketplacePage: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Booking Modal State
+  const [selectedCar, setSelectedCar] = useState<Car | null>(null);
+  const [availableDrivers, setAvailableDrivers] = useState<Driver[]>([]);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [activeGalleryImage, setActiveGalleryImage] = useState<string | null>(null);
 
   // 1. Initial Load
   useEffect(() => {
@@ -76,6 +83,49 @@ export const MarketplacePage: React.FC = () => {
     loadCars(selectedDpc, startDate, endDate, searchTerm);
   };
 
+  const handleSelectCar = async (car: Car) => {
+      setSelectedCar(car);
+      setActiveGalleryImage(getCarImage(car)); // Set main image as initial
+      setSelectedDriver(null);
+      setAvailableDrivers([]);
+      setLoadingDrivers(true);
+      
+      // Load available drivers from same company
+      try {
+          const drivers = await marketplaceService.getAvailableDrivers(car.company_id, startDate, endDate);
+          setAvailableDrivers(drivers);
+      } catch (e) {
+          console.error("Failed to load drivers", e);
+      } finally {
+          setLoadingDrivers(false);
+      }
+  };
+
+  const closeModal = () => {
+      setSelectedCar(null);
+      setSelectedDriver(null);
+      setActiveGalleryImage(null);
+  };
+
+  const handleBookingProcess = () => {
+      // Create WhatsApp message
+      if (!selectedCar) return;
+      const company = (selectedCar.companies as any);
+      
+      let msg = `Halo ${company.name}, saya melihat unit *${selectedCar.brand} ${selectedCar.model} (${selectedCar.year})* di Marketplace ASPERDA. \n\n`;
+      msg += `📅 Rencana Sewa: ${startDate} s/d ${endDate}\n`;
+      
+      if (selectedDriver) {
+          msg += `👮 Dengan Driver: ${selectedDriver.full_name} (Rating ${selectedDriver.rating}⭐)\n`;
+      } else {
+          msg += `🔑 Lepas Kunci\n`;
+      }
+      
+      msg += `\nApakah unit tersedia?`;
+      
+      window.open(`https://wa.me/${company.phone?.replace(/^0/, '62')}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   // Determine car category image
   const getCarImage = (car: Car) => {
       if (car.image_url) return car.image_url;
@@ -89,10 +139,16 @@ export const MarketplacePage: React.FC = () => {
       return 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&q=80&w=400'; 
   };
 
+  const StarRating = ({ rating }: { rating: number }) => (
+      <div className="flex items-center gap-0.5">
+          <Star size={12} className="fill-amber-400 text-amber-400" />
+          <span className="text-xs font-bold text-slate-700">{rating || '5.0'}</span>
+      </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20 relative">
-      
-      {/* HERO & SEARCH SECTION */}
+      {/* ... (Keep existing Header & Search sections) ... */}
       <div className="bg-slate-900 pt-8 pb-24 px-4 sm:px-6 lg:px-8 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
           {/* Decorative Elements */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl -mr-20 -mt-20"></div>
@@ -103,7 +159,7 @@ export const MarketplacePage: React.FC = () => {
                   <div>
                       <h1 className="text-3xl font-extrabold text-white tracking-tight">Marketplace</h1>
                       <p className="text-blue-200 mt-2 text-sm max-w-xl">
-                          Cari unit ready dari jaringan member. Sistem otomatis menyembunyikan unit yang sedang tersewa (booked).
+                          Cari unit ready dari jaringan member. Driver & Unit diurutkan berdasarkan rating terbaik.
                       </p>
                   </div>
                   <div className="hidden md:block">
@@ -239,6 +295,15 @@ export const MarketplacePage: React.FC = () => {
                       <div className="absolute top-3 right-3 bg-white/90 backdrop-blur text-blue-700 text-[10px] font-extrabold px-2 py-1 rounded shadow-sm border border-white/50 uppercase tracking-wide">
                           {car.transmission}
                       </div>
+                      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded shadow-sm border border-white/50">
+                          <StarRating rating={car.average_rating || 5.0} />
+                      </div>
+                      {/* Gallery Indicator */}
+                      {(car.gallery && Object.keys(car.gallery).filter(k => !!(car.gallery as any)[k]).length > 0) && (
+                          <div className="absolute bottom-3 right-3 bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1 backdrop-blur-sm">
+                              <ImageIcon size={10}/> {Object.keys(car.gallery).filter(k => !!(car.gallery as any)[k]).length} Foto
+                          </div>
+                      )}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/90 to-transparent p-4">
                           <h3 className="text-white font-bold text-lg leading-tight shadow-black drop-shadow-md">{car.brand} {car.model}</h3>
                           <p className="text-slate-300 text-xs mt-0.5">{car.year} • {car.category || 'MPV'}</p>
@@ -285,14 +350,12 @@ export const MarketplacePage: React.FC = () => {
                               </div>
                           </div>
 
-                          <a 
-                            href={`https://wa.me/${(car.companies as any)?.phone?.replace(/^0/, '62')}?text=Halo ${(car.companies as any)?.name}, saya melihat unit *${car.brand} ${car.model} (${car.year})* di Marketplace ASPERDA. Saya berencana sewa tanggal ${startDate} s/d ${endDate}. Apakah unit tersedia?`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg shadow-green-600/20"
+                          <button 
+                            onClick={() => handleSelectCar(car)}
+                            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg shadow-blue-600/20"
                           >
-                            <i className="fab fa-whatsapp text-lg"></i> Hubungi Pemilik
-                          </a>
+                            Lihat Detail & Pesan
+                          </button>
                       </div>
                   </div>
                 </div>
@@ -300,6 +363,134 @@ export const MarketplacePage: React.FC = () => {
             </div>
           )}
       </div>
+
+      {/* BOOKING MODAL */}
+      {selectedCar && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+              <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+                  {/* Modal Header */}
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
+                      <div>
+                          <h3 className="font-bold text-slate-900 text-lg">Detail Mobil</h3>
+                          <p className="text-xs text-slate-500">{selectedCar.brand} {selectedCar.model} - {(selectedCar.companies as any)?.name}</p>
+                      </div>
+                      <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-full text-slate-500">
+                          <X size={20}/>
+                      </button>
+                  </div>
+
+                  {/* Modal Content - SCROLLABLE */}
+                  <div className="p-0 overflow-y-auto flex-1">
+                      
+                      {/* GALLERY SECTION */}
+                      <div className="bg-black relative aspect-video flex items-center justify-center overflow-hidden">
+                          <img 
+                            src={activeGalleryImage || getCarImage(selectedCar)} 
+                            className="w-full h-full object-contain"
+                            alt="Main View"
+                          />
+                      </div>
+                      
+                      {/* Thumbnails */}
+                      {selectedCar.gallery && (
+                          <div className="flex gap-2 p-2 overflow-x-auto bg-slate-900 scrollbar-hide">
+                              {/* Main Image Thumb */}
+                              <div 
+                                onClick={() => setActiveGalleryImage(getCarImage(selectedCar))}
+                                className={`w-20 h-14 flex-shrink-0 rounded overflow-hidden cursor-pointer border-2 ${activeGalleryImage === getCarImage(selectedCar) ? 'border-blue-500' : 'border-transparent'}`}
+                              >
+                                  <img src={getCarImage(selectedCar)} className="w-full h-full object-cover"/>
+                              </div>
+                              {/* Other Gallery Images */}
+                              {Object.values(selectedCar.gallery).filter(Boolean).map((url, idx) => (
+                                  <div 
+                                    key={idx}
+                                    onClick={() => setActiveGalleryImage(url!)}
+                                    className={`w-20 h-14 flex-shrink-0 rounded overflow-hidden cursor-pointer border-2 ${activeGalleryImage === url ? 'border-blue-500' : 'border-transparent'}`}
+                                  >
+                                      <img src={url!} className="w-full h-full object-cover"/>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+
+                      <div className="p-6 space-y-6">
+                          {/* Description */}
+                          {selectedCar.description && (
+                              <div>
+                                  <h4 className="font-bold text-slate-800 mb-2 border-b pb-1 text-sm">Deskripsi & Fasilitas</h4>
+                                  <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{selectedCar.description}</p>
+                              </div>
+                          )}
+
+                          {/* Driver Selection */}
+                          <div>
+                              <h4 className="text-sm font-bold text-slate-700 mb-2 border-b pb-1">Opsi Driver (Opsional)</h4>
+                              {loadingDrivers ? (
+                                  <div className="p-4 text-center text-slate-500 text-sm"><i className="fas fa-spinner fa-spin mr-2"></i> Mencari driver available...</div>
+                              ) : availableDrivers.length === 0 ? (
+                                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center text-xs text-slate-500">
+                                      Tidak ada driver available dari rental ini untuk tanggal tersebut.
+                                  </div>
+                              ) : (
+                                  <div className="space-y-2">
+                                      {availableDrivers.map(driver => (
+                                          <div 
+                                            key={driver.id} 
+                                            onClick={() => setSelectedDriver(selectedDriver?.id === driver.id ? null : driver)}
+                                            className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${selectedDriver?.id === driver.id ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
+                                          >
+                                              <div className="flex items-center gap-3">
+                                                  <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
+                                                      {driver.image_url ? <img src={driver.image_url} className="w-full h-full object-cover"/> : <UserCheck className="w-full h-full p-2 text-slate-400"/>}
+                                                  </div>
+                                                  <div>
+                                                      <div className="font-bold text-sm text-slate-900">{driver.full_name}</div>
+                                                      <div className="flex items-center gap-2 mt-0.5">
+                                                          <StarRating rating={driver.rating || 5.0} />
+                                                          <span className="text-[10px] text-slate-500">• {driver.dailyRate ? `Rp ${driver.dailyRate.toLocaleString()}/hari` : 'Harga Std'}</span>
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedDriver?.id === driver.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>
+                                                  {selectedDriver?.id === driver.id && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
+
+                          {/* Price Summary */}
+                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
+                              <div className="flex justify-between">
+                                  <span className="text-slate-500">Unit Mobil</span>
+                                  <span className="font-bold text-slate-900">Rp {selectedCar.price_per_day.toLocaleString()} /hari</span>
+                              </div>
+                              {selectedDriver && (
+                                  <div className="flex justify-between text-blue-700">
+                                      <span className="">+ Driver ({selectedDriver.full_name})</span>
+                                      <span className="font-bold">Rp {(selectedDriver.dailyRate || 150000).toLocaleString()} /hari</span>
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
+                      <button 
+                        onClick={handleBookingProcess}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                      >
+                          <i className="fab fa-whatsapp text-lg"></i>
+                          Hubungi Pemilik & Pesan
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

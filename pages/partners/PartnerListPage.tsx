@@ -4,12 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { partnerService } from '../../service/partnerService';
 import { Partner } from '../../types';
+import { exportToCSV, processCSVImport, downloadCSVTemplate } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Edit, Trash2, Import, Download, History, Phone } from 'lucide-react';
+import { Edit, Trash2, Import, Download, History, Phone, FileText } from 'lucide-react';
 
 export const PartnerListPage: React.FC = () => {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,6 +47,48 @@ export const PartnerListPage: React.FC = () => {
     }
   };
 
+  const handleExport = () => {
+      exportToCSV(partners, 'Data_Mitra_ASPERDA');
+  };
+
+  const handleDownloadTemplate = () => {
+      const headers = ['Name', 'Phone', 'Address', 'Email', 'Profit_Sharing'];
+      const example = ['Haji Slamet', '08111222333', 'Jl. Raya Darmo', 'slamet@email.com', '70'];
+      downloadCSVTemplate(headers, 'Template_Import_Mitra', example);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setImporting(true);
+          const file = e.target.files[0];
+          
+          processCSVImport(file, async (data) => {
+              try {
+                  let successCount = 0;
+                  for (const row of data) {
+                      if (row.Name && row.Phone) {
+                          await partnerService.createPartner({
+                              name: row.Name,
+                              phone: String(row.Phone),
+                              address: row.Address || '-',
+                              email: row.Email || '',
+                              profit_sharing_percentage: Number(row.Profit_Sharing) || 0
+                          });
+                          successCount++;
+                      }
+                  }
+                  alert(`Berhasil import ${successCount} data mitra.`);
+                  loadPartners();
+              } catch (err: any) {
+                  alert("Import Gagal: " + err.message);
+              } finally {
+                  setImporting(false);
+                  e.target.value = '';
+              }
+          });
+      }
+  };
+
   return (
     <div className="pb-20">
       {/* Header */}
@@ -54,14 +98,19 @@ export const PartnerListPage: React.FC = () => {
           <p className="text-slate-500 text-sm">Kelola pemilik mobil titipan, foto dan bagi hasil.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-            <button className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-2">
-                <Import size={16}/> Import
+            <button onClick={handleDownloadTemplate} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <FileText size={14}/> Template
             </button>
-            <button className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-2">
-                <Download size={16}/> Export
+            <label className="cursor-pointer px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                {importing ? <i className="fas fa-spinner fa-spin"></i> : <Import size={14}/>}
+                <span>Import</span>
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+            </label>
+            <button onClick={handleExport} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <Download size={14}/> Export
             </button>
             <Link to="/dashboard/partners/new">
-                <Button className="!w-auto"><i className="fas fa-plus mr-2"></i> Tambah Mitra</Button>
+                <Button className="!w-auto text-xs"><i className="fas fa-plus mr-2"></i> Tambah Mitra</Button>
             </Link>
         </div>
       </div>

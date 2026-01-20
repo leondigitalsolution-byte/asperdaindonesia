@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, AppSettings, FuelType, TollRate, UserRole, Partner, Driver, CoverageArea, CoopMember } from '../../types';
+import { User, AppSettings, FuelType, TollRate, UserRole, Partner, Driver, CoverageArea, CoopMember, Company, VerificationStatus } from '../../types';
 import { getStoredData, setStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { authService } from '../../service/authService';
 import { coopService } from '../../service/coopService';
-import { Save, RefreshCw, Trash2, Moon, Sun, Monitor, Fuel, MapPin, DollarSign, Users, Plus, X, Edit2, Tag, Package, Building, CheckCircle, CreditCard, Image as ImageIcon } from 'lucide-react';
+import { Save, RefreshCw, Trash2, Moon, Sun, Monitor, Fuel, MapPin, DollarSign, Users, Plus, X, Edit2, Tag, Package, Building, CheckCircle, CreditCard, Image as ImageIcon, ShieldCheck } from 'lucide-react';
 import { ImageUploader } from '../../components/ImageUploader';
 
 export const SettingsPage: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
     const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -66,11 +67,15 @@ export const SettingsPage: React.FC = () => {
         const loaded = getStoredData<AppSettings>('appSettings', DEFAULT_SETTINGS);
         setSettings({ ...DEFAULT_SETTINGS, ...loaded });
 
-        // Load Current User
+        // Load Current User & Company
         authService.getUserProfile().then(p => {
             if(p) {
                 setCurrentUser({ id: p.id, name: p.full_name, username: p.email, role: p.role, email: p.email });
                 setRegFullName(p.full_name); // Pre-fill name
+                
+                if (p.company_id) {
+                    authService.getCompany(p.company_id).then(c => setCurrentCompany(c));
+                }
             }
         });
     }, []);
@@ -288,6 +293,8 @@ export const SettingsPage: React.FC = () => {
 
     if (!currentUser) return <div className="p-8 text-center"><i className="fas fa-spinner fa-spin"></i> Loading settings...</div>;
 
+    const verificationStatus = (currentCompany?.verification_status || 'unverified') as string;
+
     return (
         <div className="space-y-6 pb-20">
             <div className="flex justify-between items-center">
@@ -351,26 +358,57 @@ export const SettingsPage: React.FC = () => {
                         <div><label className="block text-sm font-bold text-slate-700">Telepon</label><input type="text" className="w-full border rounded p-2" value={settings.phone} onChange={e => handleChange('phone', e.target.value)} disabled={!isOwner} /></div>
                         <div><label className="block text-sm font-bold text-slate-700">Email</label><input type="text" className="w-full border rounded p-2" value={settings.email} onChange={e => handleChange('email', e.target.value)} disabled={!isOwner} /></div>
                     </div>
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-                        <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Tampilan Aplikasi</h3>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">Tema Warna</label>
-                            <div className="flex flex-wrap gap-2">
-                                {['red', 'blue', 'green', 'purple', 'orange', 'black'].map(c => (
-                                    <button 
-                                        key={c}
-                                        onClick={() => handleChange('themeColor', c)}
-                                        className={`w-8 h-8 rounded-full border-2 ${settings.themeColor === c ? 'border-slate-600 scale-110' : 'border-transparent'}`}
-                                        style={{ backgroundColor: c === 'black' ? '#1F2937' : c === 'red' ? '#DC2626' : c === 'blue' ? '#2563EB' : c === 'green' ? '#16A34A' : c === 'purple' ? '#7C3AED' : '#EA580C' }}
-                                    />
-                                ))}
+                    
+                    <div className="space-y-6">
+                        {/* Compliance & Verification Badge */}
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="font-bold text-lg text-slate-800 border-b pb-4 mb-4 flex items-center gap-2">
+                                <ShieldCheck size={20} className="text-green-600"/> Status Kepatuhan & KPI
+                            </h3>
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className={`px-4 py-2 rounded-lg font-bold uppercase text-sm border ${verificationStatus === 'verified' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
+                                    {verificationStatus === 'verified' ? 'VERIFIED PARTNER' : 'UNVERIFIED / PENDING'}
+                                </div>
+                                <span className="text-xs text-slate-500">Status verifikasi oleh Admin Pusat/DPC</span>
+                            </div>
+                            
+                            {/* KPI Stats */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
+                                    <div className="text-xs text-slate-500 uppercase font-bold">Rating</div>
+                                    <div className="text-xl font-bold text-blue-600">{currentCompany?.kpi_rating || 5.0} ⭐</div>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
+                                    <div className="text-xs text-slate-500 uppercase font-bold">Success Rate</div>
+                                    <div className="text-xl font-bold text-green-600">{currentCompany?.kpi_order_success_ratio || 100}%</div>
+                                </div>
+                            </div>
+                            <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-700">
+                                <strong>Info:</strong> Lengkapi dokumen legalitas (SIUP, NPWP, KTP Owner) untuk mendapatkan badge <strong>Verified</strong>. Hubungi Admin DPC Anda.
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">Mode Gelap</label>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleChange('darkMode', false)} className={`flex-1 py-2 rounded border flex items-center justify-center gap-2 ${!settings.darkMode ? 'bg-slate-100 border-slate-300' : 'bg-white'}`}><Sun size={16}/> Terang</button>
-                                <button onClick={() => handleChange('darkMode', true)} className={`flex-1 py-2 rounded border flex items-center justify-center gap-2 ${settings.darkMode ? 'bg-slate-800 text-white border-slate-600' : 'bg-white'}`}><Moon size={16}/> Gelap</button>
+
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                            <h3 className="font-bold text-lg text-slate-800 border-b pb-2">Tampilan Aplikasi</h3>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Tema Warna</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {['red', 'blue', 'green', 'purple', 'orange', 'black'].map(c => (
+                                        <button 
+                                            key={c}
+                                            onClick={() => handleChange('themeColor', c)}
+                                            className={`w-8 h-8 rounded-full border-2 ${settings.themeColor === c ? 'border-slate-600 scale-110' : 'border-transparent'}`}
+                                            style={{ backgroundColor: c === 'black' ? '#1F2937' : c === 'red' ? '#DC2626' : c === 'blue' ? '#2563EB' : c === 'green' ? '#16A34A' : c === 'purple' ? '#7C3AED' : '#EA580C' }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Mode Gelap</label>
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleChange('darkMode', false)} className={`flex-1 py-2 rounded border flex items-center justify-center gap-2 ${!settings.darkMode ? 'bg-slate-100 border-slate-300' : 'bg-white'}`}><Sun size={16}/> Terang</button>
+                                    <button onClick={() => handleChange('darkMode', true)} className={`flex-1 py-2 rounded border flex items-center justify-center gap-2 ${settings.darkMode ? 'bg-slate-800 text-white border-slate-600' : 'bg-white'}`}><Moon size={16}/> Gelap</button>
+                                </div>
                             </div>
                         </div>
                     </div>

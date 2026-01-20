@@ -1,14 +1,17 @@
 
 import React, { useEffect, useState } from 'react';
+// @ts-ignore
 import { Link } from 'react-router-dom';
 import { driverService } from '../../service/driverService';
 import { Driver } from '../../types';
+import { exportToCSV, processCSVImport, downloadCSVTemplate } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Edit, Trash2, History, Phone, Import, Download } from 'lucide-react';
+import { Edit, Trash2, History, Phone, Import, Download, FileText } from 'lucide-react';
 
 export const DriverListPage: React.FC = () => {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,6 +47,48 @@ export const DriverListPage: React.FC = () => {
     }
   };
 
+  const handleExport = () => {
+      exportToCSV(drivers, 'Data_Driver_ASPERDA');
+  };
+
+  const handleDownloadTemplate = () => {
+      const headers = ['Full_Name', 'Phone', 'SIM_Number', 'Daily_Rate'];
+      const example = ['Bambang Supir', '081299998888', '123456789012', '150000'];
+      downloadCSVTemplate(headers, 'Template_Import_Driver', example);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setImporting(true);
+          const file = e.target.files[0];
+          
+          processCSVImport(file, async (data) => {
+              try {
+                  let successCount = 0;
+                  for (const row of data) {
+                      if (row.Full_Name && row.Phone) {
+                          await driverService.createDriver({
+                              full_name: row.Full_Name,
+                              phone: String(row.Phone),
+                              sim_number: row.SIM_Number ? String(row.SIM_Number) : '',
+                              dailyRate: Number(row.Daily_Rate) || 0,
+                              status: 'active'
+                          });
+                          successCount++;
+                      }
+                  }
+                  alert(`Berhasil import ${successCount} data driver.`);
+                  loadDrivers();
+              } catch (err: any) {
+                  alert("Import Gagal: " + err.message);
+              } finally {
+                  setImporting(false);
+                  e.target.value = '';
+              }
+          });
+      }
+  };
+
   return (
     <div className="pb-20">
       {/* Header Section */}
@@ -53,14 +98,19 @@ export const DriverListPage: React.FC = () => {
           <p className="text-slate-500 text-sm">Kelola data supir dan status operasional.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-            <button className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-2">
-                <Import size={16}/> Import
+            <button onClick={handleDownloadTemplate} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <FileText size={14}/> Template
             </button>
-            <button className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-2">
-                <Download size={16}/> Export
+            <label className="cursor-pointer px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                {importing ? <i className="fas fa-spinner fa-spin"></i> : <Import size={14}/>}
+                <span>Import</span>
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+            </label>
+            <button onClick={handleExport} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <Download size={14}/> Export
             </button>
             <Link to="/dashboard/drivers/new">
-                <Button className="!w-auto"><i className="fas fa-plus mr-2"></i> Tambah Driver</Button>
+                <Button className="!w-auto text-xs"><i className="fas fa-plus mr-2"></i> Tambah Driver</Button>
             </Link>
         </div>
       </div>

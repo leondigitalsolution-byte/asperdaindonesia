@@ -3,11 +3,12 @@ import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { Link } from 'react-router-dom';
 import { carService } from '../../service/carService';
-import { Car, CarStatus, MaintenanceType } from '../../types';
+import { Car, CarStatus, Transmission, CarOwnerType } from '../../types';
+import { exportToCSV, processCSVImport, downloadCSVTemplate } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Wrench, Gauge, Fuel, Zap, MapPin, Edit2 } from 'lucide-react';
+import { Wrench, Gauge, Fuel, Zap, MapPin, Edit2, Download, Import, FileText } from 'lucide-react';
 
-const MAINTENANCE_LABELS: Record<MaintenanceType, string> = {
+const MAINTENANCE_LABELS: Record<string, string> = {
     'service': 'Servis',
     'oil': 'Oli',
     'oil_filter': 'F. Oli',
@@ -18,6 +19,7 @@ const MAINTENANCE_LABELS: Record<MaintenanceType, string> = {
 export const CarListPage: React.FC = () => {
   const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,6 +42,55 @@ export const CarListPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExport = () => {
+      exportToCSV(cars, 'Data_Mobil_ASPERDA');
+  };
+
+  const handleDownloadTemplate = () => {
+      const headers = ['Brand', 'Model', 'License_Plate', 'Year', 'Transmission', 'Price_Per_Day', 'Fuel_Type', 'Category'];
+      const example = ['Toyota', 'Avanza G', 'N 1234 AB', '2023', 'Automatic', '350000', 'Pertalite', 'MPV'];
+      downloadCSVTemplate(headers, 'Template_Import_Mobil', example);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setImporting(true);
+          const file = e.target.files[0];
+          
+          processCSVImport(file, async (data) => {
+              try {
+                  let successCount = 0;
+                  for (const row of data) {
+                      if (row.Brand && row.License_Plate) {
+                          await carService.createCar({
+                              brand: row.Brand,
+                              model: row.Model || '-',
+                              license_plate: row.License_Plate,
+                              year: Number(row.Year) || new Date().getFullYear(),
+                              transmission: row.Transmission?.toLowerCase() === 'manual' ? Transmission.MANUAL : Transmission.AUTOMATIC,
+                              price_per_day: Number(row.Price_Per_Day) || 0,
+                              status: CarStatus.AVAILABLE,
+                              owner_type: CarOwnerType.OWN, // Default to OWN
+                              category: row.Category || 'MPV',
+                              fuel_type: row.Fuel_Type || 'Gasoline',
+                              current_odometer: 0,
+                              maintenance: []
+                          });
+                          successCount++;
+                      }
+                  }
+                  alert(`Berhasil import ${successCount} data mobil.`);
+                  fetchCars();
+              } catch (err: any) {
+                  alert("Import Gagal: " + err.message);
+              } finally {
+                  setImporting(false);
+                  e.target.value = ''; // Reset input
+              }
+          });
+      }
   };
 
   const getStatusBadge = (status: CarStatus) => {
@@ -81,16 +132,30 @@ export const CarListPage: React.FC = () => {
 
   return (
     <div className="pb-20">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Armada Mobil</h1>
           <p className="text-slate-500 text-sm">Kelola daftar kendaraan rental Anda.</p>
         </div>
-        <Link to="/dashboard/cars/new" className="w-full sm:w-auto">
-          <Button className="w-full sm:w-auto">
-            <i className="fas fa-plus mr-2"></i> Tambah Unit
-          </Button>
-        </Link>
+        
+        <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+            <button onClick={handleDownloadTemplate} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <FileText size={14}/> Template CSV
+            </button>
+            <label className="cursor-pointer px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                {importing ? <i className="fas fa-spinner fa-spin"></i> : <Import size={14}/>}
+                <span>Import CSV</span>
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+            </label>
+            <button onClick={handleExport} className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-2">
+                <Download size={14}/> Export
+            </button>
+            <Link to="/dashboard/cars/new" className="w-full sm:w-auto">
+              <Button className="!w-full sm:!w-auto text-sm">
+                <i className="fas fa-plus mr-2"></i> Tambah Unit
+              </Button>
+            </Link>
+        </div>
       </div>
 
       {error && (

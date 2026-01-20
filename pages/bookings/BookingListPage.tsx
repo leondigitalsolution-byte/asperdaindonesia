@@ -112,9 +112,14 @@ export const BookingListPage: React.FC = () => {
     }
   };
 
-  const handleDelete = (id: string) => {
-      if(window.confirm('Apakah anda yakin ingin menghapus data booking ini?')) {
-          alert("Fitur hapus akan diimplementasikan pada update berikutnya.");
+  const handleDelete = async (id: string) => {
+      if(window.confirm('Yakin ingin menghapus data booking ini secara permanen? Data yang sudah dihapus tidak bisa dikembalikan.')) {
+          try {
+              await bookingService.deleteBooking(id);
+              fetchBookings(); // Reload list
+          } catch(e: any) {
+              alert("Gagal menghapus: " + e.message);
+          }
       }
   };
 

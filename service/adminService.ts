@@ -6,8 +6,6 @@ import { authService } from './authService';
 export const adminService = {
   /**
    * Get Pending Members (New Registrations)
-   * Super Admin: Sees all.
-   * DPC Admin: Sees only their region.
    */
   getPendingMembers: async (): Promise<Company[]> => {
     const profile = await authService.getUserProfile();
@@ -21,7 +19,39 @@ export const adminService = {
 
     // DPC Admin Restriction
     if (profile.role === UserRole.DPC_ADMIN && profile.company_id) {
-      // 1. Get DPC ID of the admin's company
+      const { data: myCompany } = await supabase
+        .from('companies')
+        .select('dpc_id')
+        .eq('id', profile.company_id)
+        .single();
+      
+      if (myCompany?.dpc_id) {
+        query = query.eq('dpc_id', myCompany.dpc_id);
+      }
+    } else if (profile.role !== UserRole.SUPER_ADMIN) {
+        throw new Error("Access Denied");
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return data as Company[];
+  },
+
+  /**
+   * Get Active Members (For Management)
+   */
+  getActiveMembers: async (): Promise<Company[]> => {
+    const profile = await authService.getUserProfile();
+    if (!profile) throw new Error("Unauthorized");
+
+    let query = supabase
+      .from('companies')
+      .select('*, dpc_regions(name, province)')
+      .eq('membership_status', MembershipStatus.ACTIVE)
+      .order('name', { ascending: true });
+
+    // DPC Admin Restriction
+    if (profile.role === UserRole.DPC_ADMIN && profile.company_id) {
       const { data: myCompany } = await supabase
         .from('companies')
         .select('dpc_id')
@@ -54,6 +84,19 @@ export const adminService = {
   },
 
   /**
+   * Update Member Compliance (Verification & Rating)
+   */
+  updateMemberCompliance: async (companyId: string, updates: { verification_status?: string, kpi_rating?: number }) => {
+      const { error } = await supabase
+        .from('companies')
+        .update(updates)
+        .eq('id', companyId);
+      
+      if (error) throw new Error(error.message);
+      return true;
+  },
+
+  /**
    * Get Pending Blacklist Reports
    */
   getBlacklistReports: async (): Promise<BlacklistReport[]> => {
@@ -64,7 +107,6 @@ export const adminService = {
       .order('created_at', { ascending: true });
 
     if (error) {
-       // If table doesn't exist yet, return empty to prevent crash
        if(error.code === '42P01') return []; 
        throw new Error(error.message);
     }
@@ -82,9 +124,6 @@ export const adminService = {
         .eq('id', report.id);
       if (error) throw new Error(error.message);
     } else {
-      // Approve: Insert to Global Blacklist + Update Report Status
-      // Note: Ideally this is a transaction (RPC), doing client-side for now.
-      
       const { error: insertError } = await supabase
         .from('global_blacklists')
         .insert({

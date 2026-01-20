@@ -98,14 +98,44 @@ export const exportToCSV = (data: any[], filename: string) => {
         alert("Tidak ada data untuk diexport");
         return;
     }
-    const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(obj => Object.values(obj).map(v => typeof v === 'string' ? `"${v}"` : JSON.stringify(v)).join(','));
+    // Simple flatten for nested objects (1 level deep)
+    const flatten = (obj: any, prefix = '', res: any = {}) => {
+        for (const key in obj) {
+            const val = obj[key];
+            if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                flatten(val, prefix + key + '_', res);
+            } else {
+                res[prefix + key] = val;
+            }
+        }
+        return res;
+    };
+
+    const flatData = data.map(item => flatten(item));
+    const headers = Object.keys(flatData[0]).join(',');
+    const rows = flatData.map(obj => Object.values(obj).map(v => typeof v === 'string' ? `"${v.replace(/"/g, '""')}"` : JSON.stringify(v)).join(','));
     const csvContent = [headers, ...rows].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.setAttribute('download', `${filename}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+// Download Template
+export const downloadCSVTemplate = (headers: string[], filename: string, exampleRow?: string[]) => {
+    const csvContent = [
+        headers.join(','),
+        exampleRow ? exampleRow.join(',') : ''
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `${filename}_template.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -118,17 +148,35 @@ export const processCSVImport = (file: File, callback: (data: any[]) => void) =>
         if(!text) return;
         
         const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        // Remove empty lines
+        const validLines = lines.filter(l => l.trim() !== '');
+        if (validLines.length < 2) return; // Header + at least 1 row
+
+        const headers = validLines[0].split(',').map(h => h.trim().replace(/"/g, ''));
         const result = [];
         
-        for(let i=1; i<lines.length; i++) {
-            if(!lines[i].trim()) continue;
-            const currentline = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, '')); // Basic CSV parse
-            const obj: any = {};
-            for(let j=0; j<headers.length; j++) {
-                obj[headers[j]] = currentline[j];
+        for(let i=1; i<validLines.length; i++) {
+            // Handle commas inside quotes logic is complex, simplistic split for now
+            // For production, use a library like PapaParse
+            const currentline = validLines[i].split(',').map(v => v.trim().replace(/^"|"$/g, '')); 
+            
+            if (currentline.length === headers.length) {
+                const obj: any = {};
+                for(let j=0; j<headers.length; j++) {
+                    const header = headers[j];
+                    let value: any = currentline[j];
+                    
+                    // Simple Type Conversion
+                    if (!isNaN(Number(value)) && value !== '') {
+                        value = Number(value);
+                    }
+                    if (value === 'true') value = true;
+                    if (value === 'false') value = false;
+
+                    obj[header] = value;
+                }
+                result.push(obj);
             }
-            result.push(obj);
         }
         callback(result);
     };

@@ -1,31 +1,18 @@
-import React, { useEffect, useState } from 'react';
+
+import React from 'react';
+// @ts-ignore
 import { Navigate } from 'react-router-dom';
-import { authService } from '../service/authService';
+import { useAuth } from '../context/AuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await authService.getCurrentSession();
-        setIsAuthenticated(!!session);
-      } catch (error) {
-        console.error("ProtectedRoute auth check error:", error);
-        // Jika error (misal service tidak ada), kita anggap user tidak terautentikasi
-        // agar user diarahkan ke login, bukannya stuck di loading.
-        setIsAuthenticated(false);
-      }
-    };
-    checkAuth();
-  }, []);
+  const { session, loading } = useAuth();
 
   // Loading state
-  if (isAuthenticated === null) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center">
@@ -39,7 +26,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!session) {
     return <Navigate to="/login" replace />;
   }
 

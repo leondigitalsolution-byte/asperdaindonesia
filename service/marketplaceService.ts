@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Car, BookingStatus } from '../types';
+import { Car, BookingStatus, Driver } from '../types';
 
 export const marketplaceService = {
   /**
@@ -50,7 +50,8 @@ export const marketplaceService = {
         )
       `)
       .eq('is_marketplace_ready', true)
-      .eq('status', 'available'); // Only physically available cars
+      .eq('status', 'available') // Only physically available cars
+      .order('average_rating', { ascending: false }); // Sort by Highest Rating
 
     // 3. Apply Filters
     
@@ -83,5 +84,49 @@ export const marketplaceService = {
 
     if (error) throw new Error(error.message);
     return data as Car[];
+  },
+
+  /**
+   * Get available drivers from a specific company for a date range
+   */
+  getAvailableDrivers: async (
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Driver[]> => {
+      // 1. Find busy drivers in this range
+      const { data: busyDrivers, error: busyError } = await supabase
+        .from('bookings')
+        .select('driver_id')
+        .eq('company_id', companyId)
+        .neq('status', BookingStatus.CANCELLED)
+        .not('driver_id', 'is', null)
+        .lt('start_date', endDate)
+        .gt('end_date', startDate);
+
+      if (busyError) throw new Error(busyError.message);
+      
+      const busyIds = busyDrivers.map(b => b.driver_id);
+
+      // 2. Fetch Active drivers from that company, excluding busy ones
+      let query = supabase
+        .from('drivers')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .order('rating', { ascending: false }); // Sort by Rating
+
+      if (busyIds.length > 0) {
+          query = query.not('id', 'in', `(${busyIds.join(',')})`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      
+      // Map DB snake_case to TS camelCase if needed, though type mostly matches
+      return data.map((d: any) => ({
+          ...d,
+          dailyRate: d.daily_rate // ensure mapping
+      })) as Driver[];
   }
 };

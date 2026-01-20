@@ -5,10 +5,11 @@ import { useNavigate, Link, useParams } from 'react-router-dom';
 import { carService } from '../../service/carService';
 import { partnerService } from '../../service/partnerService';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
-import { CarStatus, Transmission, CarOwnerType, Partner, MaintenanceRecord, MaintenanceType, AppSettings } from '../../types';
+import { CarStatus, Transmission, CarOwnerType, Partner, MaintenanceRecord, MaintenanceType, AppSettings, CarGallery } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { Wrench, Zap, Fuel, Gauge, MapPin, DollarSign, Info, Package, User, Globe } from 'lucide-react';
+import { ImageUploader } from '../../components/ImageUploader';
+import { Wrench, Zap, Fuel, Gauge, MapPin, DollarSign, Info, Package, User, Globe, Calendar, Image as ImageIcon, History } from 'lucide-react';
 
 const MAINTENANCE_LABELS: Record<MaintenanceType, string> = {
     'service': 'Servis Rutin',
@@ -17,6 +18,17 @@ const MAINTENANCE_LABELS: Record<MaintenanceType, string> = {
     'fuel_filter': 'Ganti Filter BBM',
     'tires': 'Ganti Ban'
 };
+
+const GALLERY_KEYS: { key: keyof CarGallery, label: string }[] = [
+    { key: 'front', label: 'Eksterior - Depan' },
+    { key: 'back', label: 'Eksterior - Belakang' },
+    { key: 'right', label: 'Eksterior - Samping Kanan' },
+    { key: 'left', label: 'Eksterior - Samping Kiri' },
+    { key: 'interior_dash', label: 'Interior - Dashboard' },
+    { key: 'interior_seats', label: 'Interior - Kursi Penumpang' },
+    { key: 'interior_trunk', label: 'Interior - Bagasi' },
+    { key: 'detail_engine', label: 'Detail Fasilitas / Mesin' },
+];
 
 export const CarFormPage: React.FC = () => {
   const navigate = useNavigate();
@@ -31,7 +43,7 @@ export const CarFormPage: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   
   // Tabs
-  const [activeTab, setActiveTab] = useState<'info' | 'pricing' | 'maintenance'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pricing' | 'gallery' | 'maintenance'>('info');
 
   const [formData, setFormData] = useState({
     brand: '',
@@ -49,7 +61,10 @@ export const CarFormPage: React.FC = () => {
     gps_device_id: '',
     current_odometer: 0,
     driver_daily_salary: 0,
-    is_marketplace_ready: false // Default false
+    is_marketplace_ready: false,
+    stnk_expiry_date: '',
+    
+    description: ''
   });
 
   // Dynamic Pricing State
@@ -63,9 +78,12 @@ export const CarFormPage: React.FC = () => {
   // Maintenance State
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
 
-  // Image
+  // Image Main
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Gallery State
+  const [gallery, setGallery] = useState<CarGallery>({});
 
   useEffect(() => {
     const initData = async () => {
@@ -108,12 +126,15 @@ export const CarFormPage: React.FC = () => {
                     gps_device_id: car.gps_device_id || '',
                     current_odometer: car.current_odometer || 0,
                     driver_daily_salary: car.driver_daily_salary || 0,
-                    is_marketplace_ready: car.is_marketplace_ready || false
+                    is_marketplace_ready: car.is_marketplace_ready || false,
+                    stnk_expiry_date: car.stnk_expiry_date || '',
+                    description: car.description || ''
                 });
 
                 if(car.image_url) setPreviewUrl(car.image_url);
                 if(car.maintenance) setMaintenanceRecords(car.maintenance);
                 if(car.pricing) setPricing(car.pricing);
+                if(car.gallery) setGallery(car.gallery);
                 
                 // Populate Fuel
                 if(car.fuel_type === 'Electric') {
@@ -148,7 +169,7 @@ export const CarFormPage: React.FC = () => {
     initData();
   }, [id, isEditMode]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -177,6 +198,26 @@ export const CarFormPage: React.FC = () => {
       setImageFile(file);
       setPreviewUrl(URL.createObjectURL(file));
     }
+  };
+
+  // Gallery Image Handler
+  const handleGalleryUpload = async (key: keyof CarGallery, dataUrl: string | null) => {
+      if (!dataUrl) {
+          setGallery(prev => ({ ...prev, [key]: undefined }));
+          return;
+      }
+      
+      try {
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const file = new File([blob], `${key}_${Date.now()}.jpg`, { type: "image/jpeg" });
+          
+          const url = await carService.uploadCarImage(file);
+          setGallery(prev => ({ ...prev, [key]: url }));
+      } catch (e) {
+          console.error("Gallery upload failed", e);
+          alert("Gagal upload foto galeri");
+      }
   };
 
   // Maintenance Logic
@@ -225,7 +266,8 @@ export const CarFormPage: React.FC = () => {
         fuel_type: finalFuelType,
         fuel_ratio: finalFuelRatio,
         maintenance: maintenanceRecords,
-        pricing: pricing
+        pricing: pricing,
+        gallery: gallery
     };
 
     try {
@@ -249,7 +291,7 @@ export const CarFormPage: React.FC = () => {
   }
   
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto pb-20">
       <div className="mb-6 flex items-center gap-2">
         <Link to="/dashboard/cars" className="text-slate-500 hover:text-slate-800 transition-colors">
           <i className="fas fa-arrow-left"></i>
@@ -260,25 +302,32 @@ export const CarFormPage: React.FC = () => {
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         
         {/* Tab Header */}
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-slate-200 overflow-x-auto">
            <button 
              type="button"
              onClick={() => setActiveTab('info')}
-             className={`flex-1 py-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'info' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+             className={`flex-1 py-4 px-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'info' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
            >
              <Info size={16}/> Informasi Umum
            </button>
            <button 
              type="button"
              onClick={() => setActiveTab('pricing')}
-             className={`flex-1 py-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'pricing' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+             className={`flex-1 py-4 px-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'pricing' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
            >
              <DollarSign size={16}/> Harga & Driver
            </button>
            <button 
              type="button"
+             onClick={() => setActiveTab('gallery')}
+             className={`flex-1 py-4 px-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'gallery' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+           >
+             <ImageIcon size={16} /> Galeri & Fasilitas
+           </button>
+           <button 
+             type="button"
              onClick={() => setActiveTab('maintenance')}
-             className={`flex-1 py-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 ${activeTab === 'maintenance' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+             className={`flex-1 py-4 px-4 text-sm font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'maintenance' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
            >
              <Wrench size={16} /> Maintenance
            </button>
@@ -329,7 +378,7 @@ export const CarFormPage: React.FC = () => {
                     {/* Image Upload */}
                     <div className="flex justify-center mb-6">
                         <div className="w-full">
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">Foto Mobil</label>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Foto Utama (Thumbnail Tampak Depan Serong)</label>
                         <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:bg-slate-50 transition-colors relative">
                             {previewUrl ? (
                             <div className="relative h-48 w-full">
@@ -443,45 +492,49 @@ export const CarFormPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Fuel Config */}
-                    <div className="space-y-3 pt-4 border-t border-slate-100">
-                        <label className="block text-sm font-semibold text-slate-700">Jenis Bahan Bakar</label>
-                         
-                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Pilih BBM</label>
+                    {/* NEW STNK & FUEL Section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                        {/* STNK Expiry Field */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <label className="block text-sm font-bold text-slate-700 mb-1.5 flex items-center gap-2">
+                                <Calendar size={16}/> Masa Berlaku STNK
+                            </label>
+                            <input 
+                                type="date"
+                                name="stnk_expiry_date"
+                                className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm"
+                                value={formData.stnk_expiry_date}
+                                onChange={handleChange}
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                Wajib diisi untuk kepatuhan (Compliance) standar asosiasi.
+                            </p>
+                        </div>
+
+                        {/* Fuel Type */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <label className="block text-sm font-bold text-slate-700 mb-1.5 flex items-center gap-2">
+                                <Fuel size={16}/> Jenis BBM & Konsumsi
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
                                 <select 
-                                    className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm" 
+                                    className="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs" 
                                     value={fuelType} 
                                     onChange={e => handleFuelTypeChange(e.target.value)}
                                 >
                                     {settings.fuelTypes?.map(f => (
-                                        <option key={f.name} value={f.name}>{f.name} ({f.category})</option>
+                                        <option key={f.name} value={f.name}>{f.name}</option>
                                     ))}
                                 </select>
-                            </div>
-                            
-                            {fuelCategory !== 'Electric' && (
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Ratio Konsumsi (1:X)</label>
-                                    <select className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-sm" value={fuelRatio} onChange={e => setFuelRatio(Number(e.target.value))}>
+                                {fuelCategory !== 'Electric' && (
+                                    <select className="w-full border border-slate-300 rounded-lg p-2 bg-white text-xs" value={fuelRatio} onChange={e => setFuelRatio(Number(e.target.value))}>
                                         {Array.from({length: 16}, (_, i) => i + 5).map(num => (
-                                            <option key={num} value={num}>{num} KM / Liter</option>
+                                            <option key={num} value={num}>1:{num} KM</option>
                                         ))}
                                     </select>
-                                </div>
-                            )}
-                        </div>
-                        
-                        {fuelCategory === 'Electric' && (
-                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center gap-3">
-                                <Zap className="text-blue-600" size={20}/>
-                                <div className="text-xs text-blue-800">
-                                    <strong>Mobil Listrik (EV)</strong><br/>
-                                    BBM & Ratio tidak diperlukan untuk kategori ini.
-                                </div>
+                                )}
                             </div>
-                        )}
+                        </div>
                     </div>
                     
                     {/* GPS */}
@@ -548,6 +601,45 @@ export const CarFormPage: React.FC = () => {
                             </div>
                         </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'gallery' && (
+                <div className="space-y-6 animate-fade-in">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Deskripsi & Fasilitas</label>
+                        <textarea
+                            name="description"
+                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm h-32"
+                            placeholder="Jelaskan kondisi mobil, fasilitas interior (TV, Audio, Captain Seat), kondisi AC, atau keunggulan lainnya..."
+                            value={formData.description}
+                            onChange={handleChange}
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Deskripsi ini akan muncul di halaman Marketplace saat pelanggan melihat detail mobil.</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <ImageIcon size={18}/> Foto Detail Mobil (8 Sisi)
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {GALLERY_KEYS.map((item) => (
+                                <div key={item.key}>
+                                    <ImageUploader 
+                                        image={gallery[item.key] || null}
+                                        onImageChange={(val) => handleGalleryUpload(item.key, val)}
+                                        label={item.label}
+                                        aspectRatio="video"
+                                        placeholder="Upload"
+                                        className="bg-white h-full"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-center text-slate-500 mt-4 italic">
+                            Foto ini akan ditampilkan sebagai galeri di Marketplace. Upload foto dengan pencahayaan yang baik.
+                        </p>
                     </div>
                 </div>
             )}
@@ -633,15 +725,23 @@ export const CarFormPage: React.FC = () => {
                         <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                             <Gauge size={18} /> Odometer Saat Ini (KM)
                         </label>
-                        <input 
-                            type="number" 
-                            className="w-full border border-slate-300 rounded-lg p-4 text-2xl font-mono font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
-                            placeholder="0"
-                            name="current_odometer"
-                            value={formData.current_odometer}
-                            onChange={handleChange}
-                        />
-                        <p className="text-xs text-slate-500 mt-2">Update angka ini secara berkala agar notifikasi servis akurat.</p>
+                        <div className="relative">
+                            <input 
+                                type="number" 
+                                className="w-full border border-slate-300 rounded-lg p-4 pl-12 text-2xl font-mono font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                                placeholder="0"
+                                name="current_odometer"
+                                value={formData.current_odometer}
+                                onChange={handleChange}
+                            />
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                                <History size={24}/>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                            <Info size={14}/>
+                            <span>Data ini otomatis diperbarui saat Admin mengisi <strong>Checklist Booking</strong>. Anda tidak perlu mengisi manual kecuali ada koreksi.</span>
+                        </div>
                     </div>
 
                     <div>

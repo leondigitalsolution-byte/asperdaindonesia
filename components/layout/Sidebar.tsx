@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 // @ts-ignore
 import { NavLink, useNavigate } from 'react-router-dom';
-import { authService } from '../../service/authService';
+import { useAuth } from '../../context/AuthContext';
 import { UserRole, AppSettings } from '../../types';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { X } from 'lucide-react';
@@ -14,20 +14,12 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const navigate = useNavigate();
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [userName, setUserName] = useState<string>('');
-  const [logoError, setLogoError] = useState(false);
+  const { profile, signOut } = useAuth(); // Menggunakan Context
+  
   const [appLogo, setAppLogo] = useState<string>('');
+  const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
-    // Check Role for Menu Visibility & Display Name
-    authService.getUserProfile().then(profile => {
-      if (profile) {
-        setRole(profile.role);
-        setUserName(profile.full_name);
-      }
-    });
-
     // Load App Logo from Settings
     const settings = getStoredData<AppSettings>('appSettings', DEFAULT_SETTINGS);
     if (settings.logoUrl) {
@@ -36,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   }, []);
 
   const handleLogout = async () => {
-    await authService.logout();
+    await signOut();
     navigate('/login');
   };
 
@@ -44,6 +36,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   const handleLinkClick = () => {
     if (onClose) onClose();
   };
+
+  const role = profile?.role;
+  const userName = profile?.full_name || 'User';
 
   // Grouped Menu Structure
   const menuGroups = [
@@ -99,8 +94,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   const isOrgAdmin = role === UserRole.SUPER_ADMIN || role === UserRole.DPC_ADMIN;
   const displayRole = role ? role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Loading...';
 
-  // CSS Classes for Responsive Behavior
-  // Mobile: Fixed, transform based on isOpen. Desktop: Fixed, translate-0 (always visible).
   const sidebarClasses = `
     w-72 bg-slate-900 text-white flex flex-col h-[100dvh] fixed left-0 top-0 overflow-y-auto z-50
     transition-transform duration-300 ease-in-out shadow-2xl
@@ -242,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
               {userName.charAt(0).toUpperCase()}
             </div>
             <div className="overflow-hidden">
-               <div className="text-sm font-bold text-white truncate">{userName || 'User'}</div>
+               <div className="text-sm font-bold text-white truncate">{userName}</div>
                <div className={`text-[10px] uppercase tracking-wide truncate ${isOrgAdmin ? 'text-amber-400 font-bold' : 'text-slate-400'}`}>
                  {displayRole}
                </div>

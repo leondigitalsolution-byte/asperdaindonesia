@@ -313,6 +313,19 @@ export const bookingService = {
   },
 
   /**
+   * Delete Booking (Hapus Transaksi)
+   */
+  deleteBooking: async (id: string) => {
+      const { error } = await supabase
+          .from('bookings')
+          .delete()
+          .eq('id', id);
+      
+      if (error) throw new Error(error.message);
+      return true;
+  },
+
+  /**
    * AUTOMATED FINANCE GENERATOR
    * Checks booking status and payment, then creates Income/Expense records.
    */
