@@ -37,6 +37,9 @@ import { AdminPayLaterPage } from './pages/admin/AdminPayLaterPage';
 import { CoopMemberListPage } from './pages/coop/CoopMemberListPage';
 import { CoopMemberFormPage } from './pages/coop/CoopMemberFormPage';
 
+// Public Pages
+import { PublicReviewPage } from './pages/public/PublicReviewPage';
+
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 
@@ -124,6 +127,9 @@ const AppRoutes: React.FC = () => {
           </PublicRoute>
         } 
       />
+
+      {/* Public Review Route (No Auth Required) */}
+      <Route path="/review/:token" element={<PublicReviewPage />} />
       
       {/* Protected Dashboard Routes with Layout */}
       <Route 

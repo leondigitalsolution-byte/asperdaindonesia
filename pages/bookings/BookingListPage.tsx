@@ -6,7 +6,7 @@ import { bookingService } from '../../service/bookingService';
 import { Booking, BookingStatus, AppSettings, DriverOption } from '../../types';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, Printer, Download, Plus } from 'lucide-react';
+import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, Printer, Download, Plus, Star } from 'lucide-react';
 import { ChecklistModal } from '../../components/bookings/ChecklistModal';
 
 export const BookingListPage: React.FC = () => {
@@ -125,7 +125,14 @@ export const BookingListPage: React.FC = () => {
 
   const handleWhatsApp = (booking: Booking) => {
       if(!booking.customers?.phone) return;
-      const msg = `Halo ${booking.customers.full_name}, ini mengenai booking mobil ${booking.cars?.brand} ${booking.cars?.model} untuk tanggal ${formatDate(booking.start_date)}.`;
+      let msg = `Halo ${booking.customers.full_name}, ini mengenai booking mobil ${booking.cars?.brand} ${booking.cars?.model} untuk tanggal ${formatDate(booking.start_date)}.`;
+      
+      // Feature: Add Review Link if Completed and Token exists
+      if (booking.status === BookingStatus.COMPLETED && booking.review_token) {
+          const appUrl = window.location.origin;
+          msg += `\n\nTerima kasih telah menggunakan jasa kami. Mohon kesediaannya untuk memberikan penilaian layanan melalui link berikut:\n${appUrl}/#/review/${booking.review_token}`;
+      }
+
       window.open(`https://wa.me/${booking.customers.phone.replace(/^0/, '62')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -450,9 +457,17 @@ export const BookingListPage: React.FC = () => {
                                     <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
                                         <div>
                                             <h3 className="text-lg font-black text-slate-900 uppercase leading-tight">{booking.cars?.brand} {booking.cars?.model}</h3>
-                                            <span className="inline-block bg-slate-100 text-slate-600 text-xs font-bold px-2 py-0.5 rounded border border-slate-200 mt-1">
-                                                {booking.cars?.license_plate}
-                                            </span>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="inline-block bg-slate-100 text-slate-600 text-xs font-bold px-2 py-0.5 rounded border border-slate-200">
+                                                    {booking.cars?.license_plate}
+                                                </span>
+                                                {/* Review Pending Indicator */}
+                                                {booking.status === BookingStatus.COMPLETED && booking.review_token && (
+                                                    <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full flex items-center gap-1 font-bold">
+                                                        <Star size={10} className="fill-yellow-600 text-yellow-600"/> Menunggu Review
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit ${statusStyle.badge}`}>
                                             {statusStyle.label}
@@ -519,8 +534,12 @@ export const BookingListPage: React.FC = () => {
 
                                         <div className="hidden sm:block w-px h-6 bg-slate-200 mx-2"></div>
                                         
-                                        <button onClick={() => handleWhatsApp(booking)} className="flex-1 sm:flex-none justify-center px-3 py-2 rounded text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 flex items-center gap-1 transition-colors">
-                                            <MessageCircle size={14}/> WA
+                                        <button 
+                                            onClick={() => handleWhatsApp(booking)} 
+                                            className={`flex-1 sm:flex-none justify-center px-3 py-2 rounded text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 flex items-center gap-1 transition-colors ${booking.status === BookingStatus.COMPLETED && booking.review_token ? 'ring-2 ring-green-300 ring-offset-1' : ''}`}
+                                            title={booking.status === BookingStatus.COMPLETED ? "Kirim Invoice & Link Review" : "Kirim Pesan WA"}
+                                        >
+                                            <MessageCircle size={14}/> WA {booking.status === BookingStatus.COMPLETED && booking.review_token ? '+ Review' : ''}
                                         </button>
                                         
                                         {/* PDF Dropdown */}

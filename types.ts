@@ -364,11 +364,23 @@ export interface Booking {
   dispute_status?: DisputeStatus;
   refund_status?: string;
   insurance_claim_status?: string;
+  
+  // Review System
+  review_token?: string | null;
 
   created_at?: string;
   cars?: Car;
   customers?: Customer;
   drivers?: Driver; 
+  companies?: Company;
+}
+
+export interface Review {
+  id: string;
+  booking_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
 }
 
 export interface DamageReport {

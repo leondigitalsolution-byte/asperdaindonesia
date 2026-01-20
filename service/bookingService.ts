@@ -268,6 +268,27 @@ export const bookingService = {
   },
 
   /**
+   * Public: Get Booking by Review Token
+   * This is used by the public review page.
+   */
+  getBookingByToken: async (token: string): Promise<Booking> => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        status,
+        customers (full_name),
+        cars (brand, model, image_url),
+        companies (name, logo_url)
+      `)
+      .eq('review_token', token)
+      .single();
+
+    if (error) throw new Error("Token review tidak valid atau kadaluarsa.");
+    return data as unknown as Booking;
+  },
+
+  /**
    * Update booking
    */
   updateBooking: async (id: string, updates: Partial<Booking>) => {
@@ -289,6 +310,14 @@ export const bookingService = {
     }
 
     const payload: any = { ...updates };
+    
+    // Auto-generate Review Token if status changed to COMPLETED
+    if (updates.status === BookingStatus.COMPLETED) {
+       // Generate a simple random token
+       payload.review_token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    }
+
+    // Cleanup relations
     delete payload.cars;
     delete payload.customers;
     delete payload.drivers;
