@@ -27,163 +27,116 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Ref to prevent race conditions during rapid tab switching
-  const checkingRef = useRef(false);
+  const mountedRef = useRef(false);
+  const profileCache = useRef<{ id: string, data: Profile } | null>(null);
 
-  // 1. Core Logic: Sign Out & Clean Up
+  // 1. Core Logic: Sign Out
   const signOut = async () => {
       try {
         await authService.logout();
       } catch (e) {
         console.warn("Logout warning:", e);
       } finally {
-        // Clear Local State
-        setProfile(null);
-        setSession(null);
-        setUser(null);
-        setLoading(false);
-        localStorage.clear(); // Hard clear to remove stale tokens
-        
-        // Force redirect to prevent lingering state
-        if (window.location.hash !== '#/login') {
-            window.location.href = '/#/login';
+        if (mountedRef.current) {
+            setProfile(null);
+            setSession(null);
+            setUser(null);
+            profileCache.current = null;
         }
+        localStorage.clear(); 
+        window.location.href = '/#/login';
       }
   };
 
   // 2. Fetch Profile Data
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, forceRefresh = false) => {
     try {
-      const data = await authService.getUserProfile();
-      if (!data) {
-          console.warn("Profile missing. User might be deleted or DB error.");
-          throw new Error("Profile missing");
+      // Jika data sudah ada di cache & ID sama, pakai cache saja (Instant)
+      if (!forceRefresh && profileCache.current?.id === userId && profileCache.current?.data) {
+          if (!profile && mountedRef.current) {
+              setProfile(profileCache.current.data);
+          }
+          return;
       }
-      setProfile(data);
+
+      const data = await authService.getUserProfile();
+      
+      if (mountedRef.current && data) {
+          setProfile(data);
+          profileCache.current = { id: userId, data: data };
+      }
     } catch (error) {
       console.error("Error fetching profile:", error);
-      // Don't sign out immediately on profile fetch error to allow retries,
-      // unless the session itself is invalid (handled by authService returning null)
     }
   };
 
   const refreshProfile = async () => {
-      if(user) await fetchProfile(user.id);
+      if(user) await fetchProfile(user.id, true);
   };
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
 
-    // 3. Initialize Session on Mount
     const initializeAuth = async () => {
-      if (checkingRef.current) return;
-      checkingRef.current = true;
-
       try {
-        // Get session from local storage
-        const { data, error } = await supabase.auth.getSession();
-        
-        if (error) throw error;
+        // Cek sesi lokal (Sangat Cepat)
+        const { data: { session: localSession } } = await supabase.auth.getSession();
 
-        if (mounted) {
-          if (data.session) {
-            // Optimistically set session
-            setSession(data.session);
-            setUser(data.session.user);
-            
-            // Validate token with server
-            const { data: { user: validUser }, error: userError } = await supabase.auth.getUser();
-            
-            if (userError || !validUser) {
-                console.warn("Token stale on init, attempting refresh...");
-                // AUTOMATIC RECOVERY: Try to refresh the session using the Refresh Token
-                const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-                
-                if (refreshError || !refreshData.session) {
-                    console.error("Session recovery failed. User must login again.");
-                    throw new Error("Session expired");
-                } else {
-                    console.log("Session recovered successfully.");
-                    setSession(refreshData.session);
-                    setUser(refreshData.session.user);
-                    await fetchProfile(refreshData.session.user.id);
-                }
-            } else {
-                // Token is valid
-                await fetchProfile(data.session.user.id);
-            }
-          } else {
-            // No session found
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-          }
+        if (localSession) {
+          setSession(localSession);
+          setUser(localSession.user);
+          // Initial load wajib fetch profile untuk cek Role
+          await fetchProfile(localSession.user.id, false);
         }
       } catch (error) {
         console.error("Auth Init Error:", error);
-        if (mounted) await signOut();
+        await signOut();
       } finally {
-        if (mounted) {
+        if (mountedRef.current) {
             setLoading(false);
-            checkingRef.current = false;
         }
       }
     };
 
     initializeAuth();
 
-    // 4. Listener: Supabase Auth State Changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      console.log(`Auth Event: ${event}`);
+    // 4. Listener: Supabase Auth State Changes (Optimized)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (!mountedRef.current) return;
+      
+      if (event === 'INITIAL_SESSION') return;
 
       if (event === 'SIGNED_OUT') {
           setSession(null);
           setUser(null);
           setProfile(null);
+          profileCache.current = null;
           setLoading(false);
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setSession(session);
-          setUser(session?.user ?? null);
-          if (session?.user && (!profile || profile.id !== session.user.id)) {
-             await fetchProfile(session.user.id);
+      } 
+      else if (event === 'TOKEN_REFRESHED') {
+          // SILENT REFRESH: Hanya update token di memory.
+          // JANGAN panggil DB, JANGAN set loading. User tidak akan merasakan apa-apa.
+          console.log("Token refreshed silently.");
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+      }
+      else if (event === 'SIGNED_IN') {
+          // Login beneran, perlu ambil data profile
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+          
+          if (newSession?.user) {
+             await fetchProfile(newSession.user.id, false);
           }
           setLoading(false);
       }
     });
 
-    // 5. Listener: Window Focus (Wake up from sleep)
-    // FIX: Auto-refresh session when tab becomes visible to prevent "Loading..." loop
-    const handleFocus = async () => {
-        if (document.visibilityState === 'visible' && session) {
-            console.log("Tab woke up, refreshing session...");
-            // Proactively refresh to ensure token is valid after sleep
-            const { data, error } = await supabase.auth.refreshSession();
-            
-            if (error) {
-                console.warn("Background refresh failed:", error.message);
-                // Only sign out if refresh token is strictly invalid
-                if (error.message.includes('refresh_token_not_found') || error.message.includes('Invalid refresh token')) {
-                    await signOut();
-                }
-            } else if (data.session) {
-                // Update session with fresh token
-                setSession(data.session);
-                setUser(data.session.user);
-            }
-        }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('visibilitychange', handleFocus);
-
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       if (subscription && subscription.unsubscribe) subscription.unsubscribe();
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('visibilitychange', handleFocus);
     };
-  }, [session]); // Keep session in dependency to allow refresh logic to check current state
+  }, []); 
 
   const isAdmin = profile?.role === 'super_admin' || profile?.role === 'dpc_admin';
   const isOwner = profile?.role === 'owner' || isAdmin;

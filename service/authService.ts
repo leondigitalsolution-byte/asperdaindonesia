@@ -110,19 +110,21 @@ export const authService = {
   // -------------------------
 
   getUserProfile: async (): Promise<Profile | null> => {
-    // 1. Verify Authentication Status first (Catches 403/401 immediately)
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // OPTIMISASI PERFORMA: Gunakan getSession() (Cek Local Storage) daripada getUser() (Cek Server).
+    // getSession = 0ms (Instant). getUser = 500ms+ (Network).
+    // Jika token lokal tidak valid, query DB selanjutnya akan otomatis ditolak oleh RLS Supabase.
     
-    if (authError || !user) {
-        console.warn("getUserProfile: Auth Token Invalid/Expired.", authError);
-        return null; // Return null to trigger logout in Context
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session?.user) {
+        return null;
     }
 
     // 2. Fetch Profile from Database
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', user.id)
+      .eq('id', session.user.id)
       .single();
 
     if (error) {
