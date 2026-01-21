@@ -7,8 +7,10 @@ import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { DpcRegion, RegistrationFormData, AppSettings } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { Car, Plane, Hotel, Briefcase } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'RENTAL' | 'TOURISM'>('RENTAL');
   const [dpcList, setDpcList] = useState<DpcRegion[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -65,7 +67,11 @@ export const RegisterPage: React.FC = () => {
     }
 
     try {
-      await authService.registerOwner(formData);
+      if (activeTab === 'RENTAL') {
+          await authService.registerOwner(formData);
+      } else {
+          await authService.registerTourismPartner(formData);
+      }
       setSuccess(true);
     } catch (err: any) {
       console.error("Registration Error:", err);
@@ -92,7 +98,7 @@ export const RegisterPage: React.FC = () => {
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Registrasi Berhasil!</h2>
           <p className="text-slate-600 mb-6">
-            Akun Anda dan Profil Rental telah berhasil dibuat. Silakan login untuk melanjutkan.
+            Akun {activeTab === 'RENTAL' ? 'Rental' : 'Mitra Wisata'} Anda telah berhasil dibuat. Silakan login untuk melanjutkan.
           </p>
           <Link to="/login" className="text-primary hover:underline font-medium">Ke Halaman Login &rarr;</Link>
         </div>
@@ -102,14 +108,10 @@ export const RegisterPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center relative">
-      {/* Background Layer: Blue is provided by bg-slate-900 on parent */}
-      
       {/* Background Image Layer */}
       {settings.globalBackgroundUrl ? (
           <div className="absolute inset-0 z-0">
-             {/* Image on top of blue background */}
              <img src={settings.globalBackgroundUrl} className="w-full h-full object-cover opacity-40" alt="Background" />
-             {/* Optional: Subtle gradient to ensure text/card pop if needed, though card is white */}
           </div>
       ) : (
           <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-900 to-blue-900"></div>
@@ -128,8 +130,24 @@ export const RegisterPage: React.FC = () => {
             Daftar Member ASPERDA
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Bergabung dengan jaringan rental mobil terbesar di Indonesia.
+            Pilih jenis kemitraan yang sesuai dengan bisnis Anda.
           </p>
+        </div>
+
+        {/* TAB SWITCHER */}
+        <div className="flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button 
+                onClick={() => setActiveTab('RENTAL')}
+                className={`flex-1 py-3 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'RENTAL' ? 'bg-white text-blue-700 shadow-md ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+                <Car size={18}/> Pengusaha Rental
+            </button>
+            <button 
+                onClick={() => setActiveTab('TOURISM')}
+                className={`flex-1 py-3 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'TOURISM' ? 'bg-white text-green-700 shadow-md ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+                <Briefcase size={18}/> Mitra Wisata
+            </button>
         </div>
 
         {error && (
@@ -140,24 +158,32 @@ export const RegisterPage: React.FC = () => {
               </div>
               <div className="ml-3 w-full">
                 <p className="text-sm text-red-700 font-medium">{error}</p>
-                <p className="text-xs text-red-600 mt-1">
-                  Jika masalah berlanjut, hubungi administrator sistem.
-                </p>
               </div>
             </div>
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
+          
+          <div className={`p-4 rounded-lg text-sm border flex items-start gap-3 ${activeTab === 'RENTAL' ? 'bg-blue-50 text-blue-800 border-blue-100' : 'bg-green-50 text-green-800 border-green-100'}`}>
+              <div className="mt-0.5">{activeTab === 'RENTAL' ? <Car size={16}/> : <Plane size={16}/>}</div>
+              <p>
+                  {activeTab === 'RENTAL' 
+                    ? "Daftar sebagai Pemilik Rental Mobil. Anda akan mendapatkan akses penuh untuk manajemen armada, driver, dan menerima order dari marketplace."
+                    : "Daftar sebagai Travel Agent, Hotel, atau Perusahaan (Corporate). Anda dapat menyewa unit dari jaringan rental ASPERDA dengan harga khusus (B2B)."
+                  }
+              </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="col-span-1 md:col-span-2">
               <h3 className="text-lg font-medium text-slate-900 border-b pb-2 mb-4">Data Akun</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Email"
+                  label="Email Perusahaan"
                   name="email"
                   type="email"
-                  placeholder="nama@email.com"
+                  placeholder="admin@perusahaan.com"
                   value={formData.email}
                   onChange={handleChange}
                   required
@@ -176,9 +202,9 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div className="col-span-1 md:col-span-2">
-              <h3 className="text-lg font-medium text-slate-900 border-b pb-2 mb-4">Data Pemilik</h3>
+              <h3 className="text-lg font-medium text-slate-900 border-b pb-2 mb-4">Data Penanggung Jawab</h3>
               <Input
-                label="Nama Lengkap Pemilik"
+                label="Nama Lengkap Owner / PIC"
                 name="fullName"
                 type="text"
                 placeholder="Sesuai KTP"
@@ -189,19 +215,19 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div className="col-span-1 md:col-span-2">
-              <h3 className="text-lg font-medium text-slate-900 border-b pb-2 mb-4">Data Perusahaan Rental</h3>
+              <h3 className="text-lg font-medium text-slate-900 border-b pb-2 mb-4">Data Perusahaan</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Nama Rental"
+                  label={activeTab === 'RENTAL' ? "Nama Rental" : "Nama Biro / Hotel / PT"}
                   name="companyName"
                   type="text"
-                  placeholder="CV. Maju Jaya Trans"
+                  placeholder={activeTab === 'RENTAL' ? "CV. Maju Jaya Trans" : "PT. Wisata Indah"}
                   value={formData.companyName}
                   onChange={handleChange}
                   required
                 />
                 <Input
-                  label="Nomor Telepon / WA"
+                  label="Nomor Telepon / WA Bisnis"
                   name="phone"
                   type="tel"
                   placeholder="08123456789"
@@ -212,7 +238,7 @@ export const RegisterPage: React.FC = () => {
               </div>
               <div className="mt-4">
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Wilayah DPC
+                  Wilayah Operasional (DPC)
                 </label>
                 <select
                   name="dpcId"
@@ -231,7 +257,7 @@ export const RegisterPage: React.FC = () => {
               </div>
               <div className="mt-4">
                 <Input
-                  label="Alamat Lengkap Garasi/Kantor"
+                  label={activeTab === 'RENTAL' ? "Alamat Garasi / Kantor" : "Alamat Kantor Pusat"}
                   name="address"
                   type="text"
                   placeholder="Jl. Raya..."
@@ -244,8 +270,8 @@ export const RegisterPage: React.FC = () => {
           </div>
 
           <div className="pt-4">
-            <Button type="submit" isLoading={loading}>
-              Daftar Sekarang
+            <Button type="submit" isLoading={loading} className={activeTab === 'RENTAL' ? 'bg-primary' : 'bg-green-600 hover:bg-green-700'}>
+              {activeTab === 'RENTAL' ? 'Daftar Sebagai Rental' : 'Daftar Sebagai Mitra Wisata'}
             </Button>
             <p className="mt-4 text-center text-sm text-slate-600">
               Sudah punya akun? <Link to="/login" className="font-medium text-primary hover:text-blue-700">Masuk di sini</Link>

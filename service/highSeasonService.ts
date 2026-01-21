@@ -30,6 +30,27 @@ export const highSeasonService = {
   },
 
   /**
+   * Get high seasons for a specific company (Used in Marketplace to calculate supplier's price)
+   */
+  getHighSeasonsByCompanyId: async (companyId: string): Promise<HighSeason[]> => {
+    const { data, error } = await supabase
+      .from('high_seasons')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('start_date', { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    return data.map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      startDate: item.start_date,
+      endDate: item.end_date,
+      priceIncrease: item.price_increase
+    })) as HighSeason[];
+  },
+
+  /**
    * Create new high season
    */
   createHighSeason: async (data: Omit<HighSeason, 'id'>) => {

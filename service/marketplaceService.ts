@@ -13,11 +13,17 @@ export const marketplaceService = {
     endDate: string,
     filters?: {
       dpcId?: string;
-      search?: string;
+      search?: string; // General Keyword
       category?: string;
+      brand?: string; // Specific Brand
+      transmission?: string;
+      year?: number; // Minimum Year
+      fuelType?: string;
     }
   ): Promise<Car[]> => {
     
+    const today = new Date().toISOString().split('T')[0];
+
     // 1. Get List of BOOKED Car IDs in the requested range
     const { data: busyBookings, error: busyError } = await supabase
         .from('bookings')
@@ -30,7 +36,10 @@ export const marketplaceService = {
     
     const busyCarIds = busyBookings?.map(b => b.car_id) || [];
 
-    // 2. Query Cars (Include average_rating and review_count)
+    // 2. Query Cars
+    // Include average_rating and review_count
+    // Filter Active & Marketplace Ready
+    // Filter STNK Valid (> Today)
     let query = supabase
       .from('cars')
       .select(`
@@ -50,7 +59,7 @@ export const marketplaceService = {
       `)
       .eq('is_marketplace_ready', true)
       .eq('status', 'available') // Only physically available cars
-      .order('average_rating', { ascending: false }); // Sort by Highest Rating
+      .gt('stnk_expiry_date', today); // STNK MUST be valid (Expiry date > Today)
 
     // 3. Apply Filters
     
@@ -69,11 +78,37 @@ export const marketplaceService = {
         query = query.eq('category', filters.category);
     }
 
-    // Filter by Search Text (Brand/Model)
+    // Filter by Transmission
+    if (filters?.transmission && filters.transmission !== '') {
+        query = query.eq('transmission', filters.transmission);
+    }
+
+    // Filter by Fuel Type
+    if (filters?.fuelType && filters.fuelType !== '') {
+        query = query.eq('fuel_type', filters.fuelType);
+    }
+
+    // Filter by Minimum Year
+    if (filters?.year && filters.year > 0) {
+        query = query.gte('year', filters.year);
+    }
+
+    // Filter by Brand (Specific) or General Search
+    if (filters?.brand) {
+        query = query.ilike('brand', `%${filters.brand}%`);
+    }
+    
+    // General Search (Model or Brand)
     if (filters?.search) {
         const term = filters.search;
-        query = query.ilike('brand', `%${term}%`); 
+        // Search in Brand OR Model
+        query = query.or(`brand.ilike.%${term}%,model.ilike.%${term}%`); 
     }
+
+    // 4. SORTING: Highest Rating -> Most Reviews
+    query = query
+        .order('average_rating', { ascending: false })
+        .order('review_count', { ascending: false });
 
     const { data, error } = await query;
 

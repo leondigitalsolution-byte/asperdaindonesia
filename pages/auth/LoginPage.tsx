@@ -156,9 +156,9 @@ export const LoginPage: React.FC = () => {
                     className="bg-white"
                   />
                   <div className="flex justify-end mt-2">
-                    <a href="#" className="text-xs font-semibold text-blue-600 hover:text-blue-500">
+                    <Link to="/forgot-password" className="text-xs font-semibold text-blue-600 hover:text-blue-500">
                       Lupa password?
-                    </a>
+                    </Link>
                   </div>
                 </div>
             </div>

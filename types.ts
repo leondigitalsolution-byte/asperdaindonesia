@@ -6,7 +6,8 @@ export enum UserRole {
   ADMIN = 'admin',
   DRIVER = 'driver',
   MITRA = 'mitra',
-  PARTNER = 'partner'
+  PARTNER = 'partner',
+  TOUR_AGENT = 'tour_agent'
 }
 
 export enum MembershipStatus {

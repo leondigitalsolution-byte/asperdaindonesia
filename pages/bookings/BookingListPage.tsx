@@ -1,12 +1,12 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 // @ts-ignore
 import { Link, useNavigate } from 'react-router-dom';
 import { bookingService } from '../../service/bookingService';
 import { Booking, BookingStatus, AppSettings, DriverOption } from '../../types';
 import { getStoredData, DEFAULT_SETTINGS } from '../../service/dataService';
 import { Button } from '../../components/ui/Button';
-import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, Printer, Download, Plus, Star } from 'lucide-react';
+import { Calendar, Clock, User, FileText, MessageCircle, Edit, Trash2, CheckCircle, XCircle, ClipboardCheck, Car as CarIcon, Filter, ChevronDown, ChevronUp, Printer, Download, Plus, Star, Search, CreditCard, MapPin, Package } from 'lucide-react';
 import { ChecklistModal } from '../../components/bookings/ChecklistModal';
 
 export const BookingListPage: React.FC = () => {
@@ -15,11 +15,21 @@ export const BookingListPage: React.FC = () => {
   const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Settings state for coverage areas display
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
-  // Filters
+  // Filters State
+  const [isFilterOpen, setIsFilterOpen] = useState(false); // Default closed
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  
+  // NEW FILTERS
+  const [filterCustomer, setFilterCustomer] = useState('');
+  const [filterPayment, setFilterPayment] = useState('ALL'); // ALL, PAID, UNPAID
+  const [filterPackage, setFilterPackage] = useState('ALL');
+  const [filterDestination, setFilterDestination] = useState('ALL');
 
   // Dropdown State
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -28,13 +38,32 @@ export const BookingListPage: React.FC = () => {
   const [checklistBooking, setChecklistBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
+    // Load Settings
+    const loadedSettings = getStoredData<AppSettings>('appSettings', DEFAULT_SETTINGS);
+    setSettings({ ...DEFAULT_SETTINGS, ...loadedSettings });
+
     fetchBookings();
   }, []);
 
-  // Filter Logic
-  useEffect(() => {
-    let result = bookings;
+  // Extract Unique Values for Dropdowns
+  const uniquePackages = useMemo(() => {
+      const pkgs = bookings.map(b => b.rental_package).filter(Boolean);
+      return Array.from(new Set(pkgs));
+  }, [bookings]);
 
+  const uniqueDestinations = useMemo(() => {
+      // Destination is actually coverage area ID, mapping needed usually but showing raw or name if available
+      // Assuming destination stores ID, we might need to map to name if possible, or just unique grouping
+      // For now unique grouping by value stored
+      const dests = bookings.map(b => b.destination).filter(Boolean);
+      return Array.from(new Set(dests));
+  }, [bookings]);
+
+  // Filter & Sort Logic
+  useEffect(() => {
+    let result = [...bookings];
+
+    // 1. FILTERING
     if (filterStartDate) {
       result = result.filter(b => new Date(b.start_date) >= new Date(filterStartDate));
     }
@@ -44,9 +73,48 @@ export const BookingListPage: React.FC = () => {
     if (filterStatus !== 'ALL') {
       result = result.filter(b => b.status === filterStatus);
     }
+    if (filterCustomer) {
+        const term = filterCustomer.toLowerCase();
+        result = result.filter(b => b.customers?.full_name.toLowerCase().includes(term));
+    }
+    if (filterPayment !== 'ALL') {
+        result = result.filter(b => {
+            const isPaid = (b.amount_paid || 0) >= b.total_price;
+            return filterPayment === 'PAID' ? isPaid : !isPaid;
+        });
+    }
+    if (filterPackage !== 'ALL') {
+        result = result.filter(b => b.rental_package === filterPackage);
+    }
+    if (filterDestination !== 'ALL') {
+        result = result.filter(b => b.destination === filterDestination);
+    }
+
+    // 2. SORTING (Priority: Confirmed -> Active -> Pending -> Completed -> Cancelled)
+    const getStatusPriority = (status: string) => {
+        switch (status) {
+            case BookingStatus.CONFIRMED: return 1; // Booked (High Priority)
+            case BookingStatus.ACTIVE: return 2;    // Jalan
+            case BookingStatus.PENDING: return 3;   // Pending
+            case BookingStatus.COMPLETED: return 4; // Selesai
+            case BookingStatus.CANCELLED: return 5; // Batal
+            default: return 6;
+        }
+    };
+
+    result.sort((a, b) => {
+        const priorityA = getStatusPriority(a.status);
+        const priorityB = getStatusPriority(b.status);
+        
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+        // Secondary sort: Date descending (Newest first)
+        return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+    });
 
     setFilteredBookings(result);
-  }, [bookings, filterStartDate, filterEndDate, filterStatus]);
+  }, [bookings, filterStartDate, filterEndDate, filterStatus, filterCustomer, filterPayment, filterPackage, filterDestination]);
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -54,7 +122,6 @@ export const BookingListPage: React.FC = () => {
     try {
       const data = await bookingService.getBookings();
       setBookings(data);
-      setFilteredBookings(data);
     } catch (err: any) {
       console.error(err);
       if (err.message?.includes('permission denied') || err.code === '42501') {
@@ -198,7 +265,7 @@ export const BookingListPage: React.FC = () => {
       const remaining = booking.total_price - (booking.amount_paid || 0);
       const isLunas = remaining <= 0;
 
-      // 3. Generate HTML
+      // 3. Generate HTML (Keep Existing Template)
       const invoiceHTML = `
         <!DOCTYPE html>
         <html>
@@ -382,43 +449,110 @@ export const BookingListPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
             <h1 className="text-2xl font-bold text-slate-900">Data Transaksi Sewa</h1>
             <Link to="/dashboard/bookings/new" className="w-full sm:w-auto">
-                <Button className="!w-full sm:!w-auto flex items-center justify-center"><i className="fas fa-plus mr-2"></i> Buat Order Baru</Button>
+                <Button className="!w-full sm:!w-auto flex items-center justify-center"><Plus className="mr-2" size={16}/> Buat Order Baru</Button>
             </Link>
         </div>
 
-        {/* Filter Card */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-3">
-             <div className="flex items-center gap-2 text-slate-500 text-sm font-bold w-full md:w-auto">
-                 <Filter size={16}/> FILTER:
+        {/* Collapsible Filter Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+             <div 
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+             >
+                 <div className="flex items-center gap-2 text-slate-500 text-sm font-bold">
+                     <Filter size={16}/> FILTER & PENCARIAN
+                 </div>
+                 {isFilterOpen ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
              </div>
              
-             <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
-                 <input 
-                    type="date" 
-                    className="w-full sm:w-auto border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={filterStartDate}
-                    onChange={e => setFilterStartDate(e.target.value)}
-                 />
-                 <span className="text-slate-400 text-sm hidden sm:inline">s/d</span>
-                 <input 
-                    type="date" 
-                    className="w-full sm:w-auto border border-slate-300 rounded-lg p-2 text-sm text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={filterEndDate}
-                    onChange={e => setFilterEndDate(e.target.value)}
-                 />
-             </div>
+             {isFilterOpen && (
+                 <div className="p-4 border-t border-slate-100 bg-white">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                         {/* 1. Date Range */}
+                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Periode Sewa</label>
+                             <div className="flex gap-2 items-center">
+                                <input type="date" className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+                                <span className="text-slate-400">-</span>
+                                <input type="date" className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+                             </div>
+                         </div>
 
-             <select 
-                className="w-full md:w-48 border border-slate-300 rounded-lg p-2 text-sm font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-             >
-                 <option value="ALL">SEMUA STATUS</option>
-                 <option value={BookingStatus.CONFIRMED}>BOOKED (Baru)</option>
-                 <option value={BookingStatus.ACTIVE}>ACTIVE (Jalan)</option>
-                 <option value={BookingStatus.COMPLETED}>COMPLETED (Selesai)</option>
-                 <option value={BookingStatus.CANCELLED}>CANCELLED</option>
-             </select>
+                         {/* 2. Customer Search */}
+                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><Search size={10}/> Nama Customer</label>
+                             <input 
+                                type="text" 
+                                placeholder="Cari Nama..." 
+                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none placeholder-slate-300"
+                                value={filterCustomer}
+                                onChange={e => setFilterCustomer(e.target.value)}
+                             />
+                         </div>
+
+                         {/* 3. Status Booking */}
+                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><CheckCircle size={10}/> Status Booking</label>
+                             <select 
+                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                                value={filterStatus}
+                                onChange={e => setFilterStatus(e.target.value)}
+                             >
+                                 <option value="ALL">SEMUA STATUS</option>
+                                 <option value={BookingStatus.CONFIRMED}>BOOKED (Baru)</option>
+                                 <option value={BookingStatus.ACTIVE}>ACTIVE (Jalan)</option>
+                                 <option value={BookingStatus.PENDING}>PENDING (Menunggu)</option>
+                                 <option value={BookingStatus.COMPLETED}>COMPLETED (Selesai)</option>
+                                 <option value={BookingStatus.CANCELLED}>CANCELLED</option>
+                             </select>
+                         </div>
+
+                         {/* 4. Payment Status */}
+                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><CreditCard size={10}/> Status Bayar</label>
+                             <select 
+                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                                value={filterPayment}
+                                onChange={e => setFilterPayment(e.target.value)}
+                             >
+                                 <option value="ALL">SEMUA</option>
+                                 <option value="PAID">LUNAS</option>
+                                 <option value="UNPAID">BELUM LUNAS</option>
+                             </select>
+                         </div>
+
+                         {/* 5. Package Filter */}
+                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><Package size={10}/> Paket Sewa</label>
+                             <select 
+                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                                value={filterPackage}
+                                onChange={e => setFilterPackage(e.target.value)}
+                             >
+                                 <option value="ALL">SEMUA PAKET</option>
+                                 {uniquePackages.map(pkg => (
+                                     <option key={pkg} value={pkg}>{pkg}</option>
+                                 ))}
+                             </select>
+                         </div>
+
+                         {/* 6. Destination Filter */}
+                         <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><MapPin size={10}/> Wilayah Tujuan</label>
+                             <select 
+                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                                value={filterDestination}
+                                onChange={e => setFilterDestination(e.target.value)}
+                             >
+                                 <option value="ALL">SEMUA WILAYAH</option>
+                                 {uniqueDestinations.map((dst, idx) => (
+                                     <option key={idx} value={dst}>{settings.coverageAreas?.find(a => a.id === dst)?.name || dst || 'Standard'}</option>
+                                 ))}
+                             </select>
+                         </div>
+                     </div>
+                 </div>
+             )}
         </div>
       </div>
 

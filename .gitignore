@@ -7,18 +7,32 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies (Folder ini sangat besar, jangan di-upload)
 node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production Build (Hasil build Vite)
 dist
 dist-ssr
-*.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Environment Variables (SANGAT PENTING: Jangan upload kunci rahasia)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor directories and files (Settingan personal komputer masing-masing)
 .DS_Store
 *.suo
-*.ntvs*
+*.ntvs
 *.njsproj
 *.sln
 *.sw?
+.vscode/*
+!.vscode/extensions.json
+.idea

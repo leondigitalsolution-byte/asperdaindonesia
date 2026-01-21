@@ -6,6 +6,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { LoginPage } from './pages/auth/LoginPage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
+
 import DashboardPage from './pages/dashboard/DashboardPage';
 import { CarListPage } from './pages/cars/CarListPage';
 import { CarFormPage } from './pages/cars/CarFormPage';
@@ -125,6 +128,24 @@ const AppRoutes: React.FC = () => {
           <PublicRoute>
             <LoginPage />
           </PublicRoute>
+        } 
+      />
+      <Route 
+        path="/forgot-password" 
+        element={
+          <PublicRoute>
+            <ForgotPasswordPage />
+          </PublicRoute>
+        } 
+      />
+      
+      {/* Reset Password uses ProtectedRoute because the email link logs the user in automatically with a recovery session */}
+      <Route 
+        path="/reset-password" 
+        element={
+          <ProtectedRoute>
+            <ResetPasswordPage />
+          </ProtectedRoute>
         } 
       />
 

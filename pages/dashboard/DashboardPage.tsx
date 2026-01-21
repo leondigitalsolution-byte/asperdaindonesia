@@ -2,11 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { dashboardService, DashboardStats } from '../../service/dashboardService';
 import { authService } from '../../service/authService';
-import { Profile, BookingStatus } from '../../types';
+import { Profile, BookingStatus, UserRole } from '../../types';
 import { Button } from '../../components/ui/Button';
 // @ts-ignore
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Search, ShoppingBag, ArrowRight } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -22,7 +22,7 @@ const DashboardPage: React.FC = () => {
         const userProfile = await authService.getUserProfile();
         setProfile(userProfile);
         
-        if (userProfile?.company_id) {
+        if (userProfile?.company_id && userProfile.role !== UserRole.TOUR_AGENT) {
           const statsData = await dashboardService.getStats();
           setStats(statsData);
         }
@@ -36,8 +36,6 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   // --- CALENDAR LOGIC (WEEK VIEW) ---
-  
-  // Generate 7 days starting from weekStartDate
   const weekDates = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(weekStartDate);
       d.setDate(d.getDate() + i);
@@ -55,24 +53,17 @@ const DashboardPage: React.FC = () => {
 
   const isDateBooked = (carId: string, date: Date) => {
     if (!stats?.monthBookings) return null;
-
     const checkDate = new Date(date);
-    checkDate.setHours(12, 0, 0, 0); // Normalized time
+    checkDate.setHours(12, 0, 0, 0); 
 
-    // STRICT FILTER: Only show ACTIVE or CONFIRMED (Booked)
     return stats.monthBookings.find(b => {
       if (b.car_id !== carId) return false;
-      
-      // Filter out Pending, Cancelled, Completed for this view
-      if (b.status !== BookingStatus.ACTIVE && b.status !== BookingStatus.CONFIRMED) {
-          return false;
-      }
+      if (b.status !== BookingStatus.ACTIVE && b.status !== BookingStatus.CONFIRMED) return false;
 
       const start = new Date(b.start_date);
       const end = new Date(b.end_date);
       start.setHours(0,0,0,0);
       end.setHours(23,59,59,999);
-      
       return checkDate >= start && checkDate <= end;
     });
   };
@@ -94,6 +85,89 @@ const DashboardPage: React.FC = () => {
     );
   }
 
+  // --- TOUR AGENT DASHBOARD VIEW ---
+  if (profile?.role === UserRole.TOUR_AGENT) {
+      return (
+          <div className="space-y-8 pb-20">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                  <div className="relative z-10">
+                      <h1 className="text-3xl font-bold mb-2">Halo, {profile.full_name} 👋</h1>
+                      <p className="text-blue-100 max-w-2xl">
+                          Selamat datang di Panel Mitra Wisata ASPERDA. Cari unit rental terbaik dari jaringan kami untuk klien Anda.
+                      </p>
+                      
+                      <div className="mt-8 flex flex-wrap gap-4">
+                          <Link to="/dashboard/marketplace">
+                              <button className="bg-white text-blue-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-md hover:bg-blue-50 transition-colors">
+                                  <Search size={20}/> Cari Mobil Sekarang
+                              </button>
+                          </Link>
+                          <Link to="/dashboard/calculator">
+                              <button className="bg-blue-500/30 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 border border-blue-400/50 hover:bg-blue-500/50 transition-colors">
+                                  <i className="fas fa-calculator"></i> Cek Estimasi Harga
+                              </button>
+                          </Link>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Quick Shortcuts */}
+              <div>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">Akses Cepat</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <Link to="/dashboard/marketplace" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+                          <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 mb-3 group-hover:scale-110 transition-transform">
+                              <ShoppingBag size={20}/>
+                          </div>
+                          <div className="font-bold text-slate-800">Status Order</div>
+                          <div className="text-xs text-slate-500">Cek pesanan unit Anda</div>
+                      </Link>
+                      
+                      <Link to="/dashboard/global-blacklist" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+                          <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600 mb-3 group-hover:scale-110 transition-transform">
+                              <i className="fas fa-shield-alt text-lg"></i>
+                          </div>
+                          <div className="font-bold text-slate-800">Cek Blacklist</div>
+                          <div className="text-xs text-slate-500">Verifikasi tamu aman</div>
+                      </Link>
+
+                      <Link to="/dashboard/customers" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+                          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 mb-3 group-hover:scale-110 transition-transform">
+                              <i className="fas fa-users text-lg"></i>
+                          </div>
+                          <div className="font-bold text-slate-800">Data Tamu</div>
+                          <div className="text-xs text-slate-500">Kelola database pax</div>
+                      </Link>
+
+                      <Link to="/dashboard/help" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group">
+                          <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 mb-3 group-hover:scale-110 transition-transform">
+                              <i className="fas fa-question-circle text-lg"></i>
+                          </div>
+                          <div className="font-bold text-slate-800">Bantuan</div>
+                          <div className="text-xs text-slate-500">Panduan & FAQ</div>
+                      </Link>
+                  </div>
+              </div>
+
+              {/* Promo Banner / Info */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div>
+                      <h4 className="font-bold text-slate-800 text-lg mb-1">Butuh unit High Season?</h4>
+                      <p className="text-slate-600 text-sm max-w-lg">
+                          Pastikan Anda memesan unit jauh-jauh hari untuk event besar. Gunakan fitur Marketplace untuk melihat ketersediaan real-time dari seluruh rental ASPERDA.
+                      </p>
+                  </div>
+                  <Link to="/dashboard/marketplace">
+                      <Button variant="outline" className="whitespace-nowrap">Lihat Marketplace &rarr;</Button>
+                  </Link>
+              </div>
+          </div>
+      );
+  }
+
+  // --- RENTAL OWNER DASHBOARD VIEW (EXISTING) ---
   return (
     <div className="space-y-6 pb-20">
       {/* Header Section */}
@@ -111,9 +185,8 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
       
-      {/* Stats Grid - Stack on mobile, grid on desktop */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Cars */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide">Total Armada</p>
@@ -125,7 +198,6 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Active Rentals */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide">Sedang Jalan</p>
@@ -137,7 +209,6 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: Total Customers */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide">Pelanggan</p>
@@ -149,7 +220,6 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 4: Revenue */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide">Omzet Bulan Ini</p>
@@ -167,7 +237,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* GANTT CHART WIDGET - WEEKLY VIEW */}
+      {/* GANTT CHART WIDGET */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50/50">
           <div className="w-full sm:w-auto">

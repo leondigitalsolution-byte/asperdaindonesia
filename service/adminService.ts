@@ -74,12 +74,21 @@ export const adminService = {
    * Approve or Reject a Member
    */
   updateMemberStatus: async (companyId: string, status: MembershipStatus) => {
-    const { error } = await supabase
+    // Gunakan .select() untuk memastikan data benar-benar berubah dan dikembalikan
+    // Jika RLS memblokir, data akan kosong meskipun tidak error
+    const { data, error } = await supabase
       .from('companies')
       .update({ membership_status: status })
-      .eq('id', companyId);
+      .eq('id', companyId)
+      .select();
 
     if (error) throw new Error(error.message);
+    
+    // Check if row was actually updated
+    if (!data || data.length === 0) {
+        throw new Error("Gagal update status. Anda mungkin tidak memiliki izin atau data tidak ditemukan.");
+    }
+    
     return true;
   },
 
@@ -87,12 +96,18 @@ export const adminService = {
    * Update Member Verification Status (Only allows changing verification status)
    */
   updateMemberCompliance: async (companyId: string, updates: { verification_status: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('companies')
         .update({ verification_status: updates.verification_status })
-        .eq('id', companyId);
+        .eq('id', companyId)
+        .select();
       
       if (error) throw new Error(error.message);
+      
+      if (!data || data.length === 0) {
+        throw new Error("Gagal update status verifikasi. Izin ditolak.");
+      }
+
       return true;
   },
 

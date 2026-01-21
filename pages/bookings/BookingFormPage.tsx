@@ -91,12 +91,18 @@ export const BookingFormPage: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
+        // Fetch all base data first
         const [c, cust, drv, hs] = await Promise.all([
           carService.getCars(),
           customerService.getCustomers(),
           driverService.getDrivers(),
           highSeasonService.getHighSeasons()
         ]);
+        
+        // Local variables to hold data that might be modified (e.g. adding new customer)
+        let currentCustomers = cust;
+        let currentCars = c;
+
         setCars(c);
         setCustomers(cust);
         setDrivers(drv);
@@ -144,20 +150,40 @@ export const BookingFormPage: React.FC = () => {
                     
                     // Attempt to find customer record for the requester company
                     const requesterName = req.requester?.name;
-                    const existingCust = cust.find((c: Customer) => c.full_name.toLowerCase().includes(requesterName.toLowerCase()));
+                    let existingCust = currentCustomers.find((c: Customer) => c.full_name.toLowerCase().trim() === requesterName.toLowerCase().trim());
+                    
                     if (existingCust) {
                         setSelectedCustomerId(existingCust.id);
                     } else {
-                        // Pre-fill prompt for creating new customer
-                        // We can't auto-create here easily without disrupting flow, so we let user create or select "Non-Member"
-                        alert(`Info: Pelanggan '${requesterName}' belum ada di database Anda. Silakan buat data pelanggan baru untuk perusahaan ini.`);
+                        // AUTO CREATE DATA PELANGGAN JIKA BELUM ADA
+                        try {
+                            const newCustomerData = await customerService.createCustomer({
+                                full_name: requesterName,
+                                phone: req.requester?.phone || '0000000000',
+                                address: req.requester?.address || 'Alamat Mitra Rental',
+                                nik: `CORP-${Date.now().toString().slice(-8)}`, // Dummy NIK for Corporate
+                                is_blacklisted: false
+                            });
+                            
+                            // Update local list & State
+                            currentCustomers = [newCustomerData, ...currentCustomers];
+                            setCustomers(currentCustomers);
+                            setSelectedCustomerId(newCustomerData.id);
+                            
+                            // Notify user subtly
+                            console.log("Auto-created customer for R2R requester");
+                        } catch (err) {
+                            console.error("Failed to auto-create R2R customer", err);
+                            alert(`Gagal membuat data pelanggan otomatis untuk ${requesterName}. Silakan buat manual.`);
+                        }
                     }
                 } else if (s.mode === 'renter_create') {
                     // I am Renter. Creating invoice for my customer using Supplier's car.
                     // Inject External Car into list so it can be selected
                     const extCar = req.cars;
-                    // Add temporary car to list
-                    setCars(prev => [...prev, { ...extCar, is_external: true }]);
+                    // Add temporary car to list locally
+                    const tempCar = { ...extCar, is_external: true };
+                    setCars(prev => [...prev, tempCar]);
                     setSelectedCarId(extCar.id);
                     setNotes(`Unit R2R dari ${req.supplier?.name}.`);
                     // Price is editable (selling price to end customer)
@@ -552,8 +578,7 @@ export const BookingFormPage: React.FC = () => {
                       </select>
                       {r2rMode === 'supplier_process' && !selectedCustomerId && (
                           <div className="text-xs text-orange-600 mt-1">
-                              *Pelanggan '{r2rRequest?.requester?.name}' tidak ditemukan. Mohon buat data pelanggan baru terlebih dahulu.
-                              <Link to="/dashboard/customers/new" target="_blank" className="font-bold underline ml-1">Buat Disini</Link>
+                              *Membuat data otomatis untuk '{r2rRequest?.requester?.name}'...
                           </div>
                       )}
                   </div>

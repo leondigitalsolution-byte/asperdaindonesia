@@ -39,9 +39,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
   const role = profile?.role;
   const userName = profile?.full_name || 'User';
+  const isTourAgent = role === UserRole.TOUR_AGENT;
+  const isOrgAdmin = role === UserRole.SUPER_ADMIN || role === UserRole.DPC_ADMIN;
+  const displayRole = role ? role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Loading...';
 
-  // Grouped Menu Structure
-  const menuGroups = [
+  // --- MENU CONFIGURATION ---
+
+  // 1. Menu untuk Rental Owner / Admin / Driver
+  const ownerMenuGroups = [
     {
       title: 'KOMUNITAS',
       items: [
@@ -85,14 +90,47 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
     }
   ];
 
+  // 2. Menu Khusus Tour Agent / Mitra Wisata
+  const tourAgentMenuGroups = [
+    {
+        title: 'UTAMA',
+        items: [
+            { label: 'Dashboard', path: '/dashboard', icon: 'fas fa-th-large', end: true },
+            { label: 'Cari Mobil (Marketplace)', path: '/dashboard/marketplace', icon: 'fas fa-search' },
+            { label: 'Cek Blacklist', path: '/dashboard/global-blacklist', icon: 'fas fa-shield-alt' },
+        ]
+    },
+    {
+        title: 'OPERASIONAL',
+        items: [
+            { label: 'Status Order', path: '/dashboard/marketplace', icon: 'fas fa-clipboard-list' }, // Directs to Marketplace outgoing tab logically
+            { label: 'List Transaksi', path: '/dashboard/bookings', icon: 'fas fa-file-invoice' },
+            { label: 'Kalender Jadwal', path: '/dashboard/calendar', icon: 'fas fa-calendar-alt' },
+            { label: 'Kalkulator Harga', path: '/dashboard/calculator', icon: 'fas fa-calculator' },
+        ]
+    },
+    {
+        title: 'DATABASE',
+        items: [
+            { label: 'Data Tamu (Pax)', path: '/dashboard/customers', icon: 'fas fa-users' },
+        ]
+    },
+    {
+        title: 'AKUN',
+        items: [
+            { label: 'Pengaturan', path: '/dashboard/settings', icon: 'fas fa-cog' },
+            { label: 'Bantuan', path: '/dashboard/help', icon: 'fas fa-question-circle' },
+        ]
+    }
+  ];
+
+  const activeMenuGroups = isTourAgent ? tourAgentMenuGroups : ownerMenuGroups;
+
   const adminItems = [
     { label: 'Verifikasi Anggota', path: '/dashboard/admin/members', icon: 'fas fa-user-check text-green-400' },
     { label: 'Review Blacklist', path: '/dashboard/admin/blacklist-review', icon: 'fas fa-shield-alt text-amber-400' },
     { label: 'Daftar PayLater', path: '/dashboard/admin/paylater', icon: 'fas fa-clock text-orange-400' }, 
   ];
-
-  const isOrgAdmin = role === UserRole.SUPER_ADMIN || role === UserRole.DPC_ADMIN;
-  const displayRole = role ? role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Loading...';
 
   const sidebarClasses = `
     w-72 bg-slate-900 text-white flex flex-col h-[100dvh] fixed left-0 top-0 overflow-y-auto z-50
@@ -129,7 +167,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
             </div>
             <div>
               <h1 className="text-lg font-extrabold tracking-tight">ASPERDA</h1>
-              <p className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Management</p>
+              <p className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">
+                  {isTourAgent ? 'Mitra Wisata' : 'Management'}
+              </p>
             </div>
           </div>
           {/* Mobile Close Button */}
@@ -141,7 +181,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
         {/* Navigation */}
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           
-          {menuGroups.map((group) => (
+          {activeMenuGroups.map((group) => (
             <div key={group.title} className="mb-6">
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">
                 {group.title}
@@ -236,7 +276,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
             </div>
             <div className="overflow-hidden">
                <div className="text-sm font-bold text-white truncate">{userName}</div>
-               <div className={`text-[10px] uppercase tracking-wide truncate ${isOrgAdmin ? 'text-amber-400 font-bold' : 'text-slate-400'}`}>
+               <div className={`text-[10px] uppercase tracking-wide truncate ${isOrgAdmin ? 'text-amber-400 font-bold' : isTourAgent ? 'text-green-400 font-bold' : 'text-slate-400'}`}>
                  {displayRole}
                </div>
             </div>

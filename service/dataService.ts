@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     ],
     // Defaults for new fields
     companyName: 'ASPERDA Rental',
-    logoUrl: '',
+    logoUrl: '/logo-asperda-surabaya.png',
     themeColor: 'blue',
     darkMode: false,
     
